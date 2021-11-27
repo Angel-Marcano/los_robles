@@ -1,0 +1,23 @@
+Al crear un Propietario se debe crear:
+
+-en users
+-en usuarios_cuenta
+
+
+
+
+
+
+// EN SOPORTE:
+
+EL FILTRO DE FECHA NO SIRVE.
+
+
+
+//FONDO PREVENTIVO:
+
+
+ FALTA GUARDAR BIEN LAS COSAS (factura linea 200);
+ No hace falta el listado de estructuras pues solo se puede usar
+la torre como tal del administrador. (admin torre b - solo ve torre b).
+

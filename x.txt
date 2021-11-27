@@ -1,0 +1,160 @@
+319->online... 1305,1306,1302,1303,1144,1304,1307,1308,1310,1311,1312,1313,1226,1002,1343,
+1658,1662,1663,1664,1670,1671,1673,
+
+,,,,
+,,,
+,1664,,1671,,
+,,
+,,,
+
+foreach (servicios_productos as servicio_producto)
+  foreach (servicio_producto->seccion_data as seccion_data)
+     foreach ( seccion_data->articulos as articulo ) cantidad
+	//foreach (  )
+	articulo->articulo_data { nombre,descripcion,porsion, unidad,tipo}
+
+
+
+ @foreach($servicios_productos['seccion_data'] as $seccion_data)
+                @foreach( $seccion_data['articulos] as $articulo )
+                        
+                       
+                @endforeach
+            @endforeach
+
+
+ @if($articulo['articulo_data']['tipo']==0)
+                        <tr>
+                            <td colspan="1" class="text-center" style="padding: 4px; width:35%;">      
+                            
+                            </td>
+                                {{$articulo['articulo_data']['nombre']}}
+                            <td class="text-center" style="padding: 4px; width:10%;">
+                                {{$articulo['articulo_data']['descripcion']}}
+                            </td>
+                            <td class="text-center" style="padding: 4px; width:15%;">
+                                {{$articulo['cantidad']}}
+                            </td>
+                            <td colspan="1" class="text-center" style="padding: 4px; width:10%;">
+                                {{$articulo['articulo_data']['porsion']}}
+                            </td>
+                            <td class="text-center" style="padding: 4px; width:10%;">
+                                {{$articulo['articulo_data']['unidad']}}
+                            </td>
+                            <td class="text-center" style="padding: 0px; width:8%;">
+                                {{$articulo['articulo_data']['porsion']*$articulo['cantidad']}}
+                            </td>
+                            
+                        </tr>
+                        @endif
+
+lineas  -> metodos
+1010 -> Route::get('excel/{export}', 'Transactions\CobranzaController@index');
+324  ->  Route::get("pdf-orden-servicio/{id}", 'Reports\RentabilidadODS\RentabilidadClienteController@OrdenServicioExportToPDF');
+        
+997-> Route::get('excel/{export}', 'Transactions\FacturaController@index');
+
+
+319 -> articulo
+
+350 ->varias respuestas
+
+796 ->especialistas y servicios terceros
+
+  ,
+            [
+                "id"=> 8194,
+                "id_articulo"=> 1302,
+                "interno"=> "1R-0762",
+                "nombre"=> "FILTER FUEL",
+                "descripcion"=> "",
+                "cantidad"=> 1,
+                "a_cliente"=> 0,
+                "sobreconsumo_id"=> null,
+                "precio_unidad_compra"=> "0.00",
+                "notas"=> null,
+                "proveedor"=> [
+                    "id"=> 8,
+                    "nombre"=> "FINNING CHILE S.A."
+                ],
+                "neto_unidad"=>[ 33394,
+                "estado"=> "PCL",
+                "clasificacion"=> [
+                    "id"=> 1,
+                    "nombre"=> "REPUESTOS",
+                    "es_articulo"=> 1,
+                    "es_agrupable"=> true
+                ]
+            ],
+            [
+                "id"=> 8195,
+                "id_articulo"=> 1303,
+                "interno"=> "326-1644",
+                "nombre"=> "FILTRO DE AGUA SEP",
+                "descripcion"=> "",
+                "cantidad"=> 1,
+                "a_cliente"=> 0,
+                "sobreconsumo_id"=> null,
+                "precio_unidad_compra"=> "0.00",
+                "notas"=> null,
+                "proveedor"=> [
+                    "id"=> 8,
+                    "nombre"=> "FINNING CHILE S.A."
+                ],
+                "neto_unidad"=> 40663,
+                "estado"=> "PCL",
+                "clasificacion"=> [
+                    "id"=> 1,
+                    "nombre"=> "REPUESTOS",
+                    "es_articulo"=> 1,
+                    "es_agrupable"=> true
+                ]
+            ],
+            [
+                "id"=> 8196,
+                "id_articulo"=> 1304,
+                "interno"=> "1R-1808",
+                "nombre"=> "ENGINE OIL FILTER",
+                "descripcion"=> "",
+                "cantidad"=> 1,
+                "a_cliente"=> 0,
+                "sobreconsumo_id"=> null,
+                "precio_unidad_compra"=> "0.00",
+                "notas"=> null,
+                "proveedor"=> [
+                    "id"=> 8,
+                    "nombre"=> "FINNING CHILE S.A."
+                ],
+                "neto_unidad"=> 41649,
+                "estado"=> "PCL",
+                "clasificacion"=> [
+                    "id"=> 1,
+                    "nombre"=> "REPUESTOS",
+                    "es_articulo"=> 1,
+                    "es_agrupable"=> true
+                ]
+            ],
+            [
+                "id"=> 8197,
+                "id_articulo"=> 1343,
+                "interno"=> "424-1424",
+                "nombre"=> "15W-40",
+                "descripcion"=> "",
+                "cantidad"=> 2,
+                "a_cliente"=> 0,
+                "sobreconsumo_id"=> null,
+                "precio_unidad_compra"=> "0.00",
+                "notas"=> null,
+                "proveedor"=> [
+                    "id"=> 8,
+                    "nombre"=> "FINNING CHILE S.A."
+                ],
+                "neto_unidad"=> 53364,
+                "estado"=> "PCL",
+                "clasificacion"=> [
+                    "id"=> 2,
+                    "nombre"=> "INSUMOS",
+                    "es_articulo"=> 1,
+                    "es_agrupable"=> false
+                ]
+            ]
