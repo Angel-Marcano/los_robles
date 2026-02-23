@@ -1,0 +1,2 @@
+@extends('layouts.app')
+@section('content')<h1 class="title">Editar Condominio</h1><form method="POST" action="{{route('condominiums.update',$condominium)}}">@csrf @method('PUT')<div class="field"><label class="label">Nombre</label><div class="control"><input name="name" class="input" value="{{$condominium->name}}" required></div></div><div class="field"><label class="checkbox"><input type="checkbox" name="active" value="1" {{$condominium->active?'checked':''}}> Activo</label></div><button class="button is-primary">Actualizar</button></form>@endsection
