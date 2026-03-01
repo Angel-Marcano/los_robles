@@ -1,71 +1,85 @@
 @extends('layouts.app')
 @section('content')
-<div class="container">
-	<div class="d-flex justify-content-between align-items-center mb-3">
-		<h1 class="h4 m-0">Editar Apartamento</h1>
-	</div>
+<div class="d-flex justify-content-between align-items-center page-header">
+	<h1><i class="bi bi-pencil-square me-2"></i>Editar Apartamento</h1>
+	<a class="btn btn-outline-secondary btn-action" href="{{ route('towers.apartments.index',$tower) }}"><i class="bi bi-arrow-left"></i> Volver</a>
+</div>
 	@if(session('status'))
 		<div class="alert alert-success">{{ session('status') }}</div>
 	@endif
+
+<div class="card mb-4">
+	<div class="card-body">
 		<form method="POST" action="{{ route('apartments.update',$apartment) }}">
 		@csrf @method('PUT')
-		<div class="mb-3">
-			<label class="form-label">Código</label>
-			<input name="code" class="form-control" value="{{ old('code',$apartment->code) }}" required>
-			@error('code')<div class="text-danger small">{{ $message }}</div>@enderror
+		@if($errors->any())
+			<div class="alert alert-danger"><ul class="mb-0">@foreach($errors->all() as $e)<li>{{$e}}</li>@endforeach</ul></div>
+		@endif
+		<div class="row g-3">
+			<div class="col-md-6">
+				<label class="form-label">Código</label>
+				<input name="code" class="form-control" value="{{ old('code',$apartment->code) }}" required>
+				@error('code')<div class="text-danger small">{{ $message }}</div>@enderror
+			</div>
+			<div class="col-md-6">
+				<label class="form-label">Alícuota (%)</label>
+				<input name="aliquot_percent" step="0.0001" type="number" class="form-control" value="{{ old('aliquot_percent',$apartment->aliquot_percent) }}" required>
+				<div class="form-text">Valor porcentual usado para prorratear gastos.</div>
+				@error('aliquot_percent')<div class="text-danger small">{{ $message }}</div>@enderror
+			</div>
 		</div>
-		<div class="mb-3">
-			<label class="form-label">Alícuota (%)</label>
-			<input name="aliquot_percent" step="0.0001" type="number" class="form-control" value="{{ old('aliquot_percent',$apartment->aliquot_percent) }}" required>
-			<div class="form-text">Valor porcentual usado para prorratear gastos.</div>
-			@error('aliquot_percent')<div class="text-danger small">{{ $message }}</div>@enderror
-		</div>
-		<div class="form-check mb-3">
+		<div class="form-check my-3">
 			<input type="hidden" name="active" value="0">
 			<input class="form-check-input" type="checkbox" name="active" value="1" id="activeCheck" {{ old('active',$apartment->active) ? 'checked' : '' }}>
 			<label class="form-check-label" for="activeCheck">Activo</label>
 			@error('active')<div class="text-danger small">{{ $message }}</div>@enderror
 		</div>
 		<hr>
-		<h2 class="h6">Propietario (opcional)</h2>
+		<h2 class="h6"><i class="bi bi-person me-1"></i>Propietario (opcional)</h2>
 		<div class="form-text mb-2">Para asociar un propietario, ingresa su email; si no existe se creará con la contraseña indicada.</div>
-		<div class="mb-3">
-			<label class="form-label">Nombre</label>
-			<input name="owner_name" class="form-control" value="{{ old('owner_name') }}">
-			@error('owner_name')<div class="text-danger small">{{ $message }}</div>@enderror
+		<div class="row g-3">
+			<div class="col-md-4">
+				<label class="form-label">Nombre</label>
+				<input name="owner_name" class="form-control" value="{{ old('owner_name') }}">
+				@error('owner_name')<div class="text-danger small">{{ $message }}</div>@enderror
+			</div>
+			<div class="col-md-4">
+				<label class="form-label">Email</label>
+				<input type="email" name="owner_email" class="form-control" value="{{ old('owner_email') }}">
+				@error('owner_email')<div class="text-danger small">{{ $message }}</div>@enderror
+			</div>
+			<div class="col-md-4">
+				<label class="form-label">Contraseña</label>
+				<input type="text" name="owner_password" class="form-control" value="{{ old('owner_password') }}" placeholder="Por defecto 1234 si se deja vacío">
+				@error('owner_password')<div class="text-danger small">{{ $message }}</div>@enderror
+			</div>
 		</div>
-		<div class="mb-3">
-			<label class="form-label">Email</label>
-			<input type="email" name="owner_email" class="form-control" value="{{ old('owner_email') }}">
-			@error('owner_email')<div class="text-danger small">{{ $message }}</div>@enderror
+		<div class="mt-3">
+			<button class="btn btn-primary btn-action"><i class="bi bi-check-lg"></i> Actualizar</button>
 		</div>
-		<div class="mb-3">
-			<label class="form-label">Contraseña</label>
-			<input type="text" name="owner_password" class="form-control" value="{{ old('owner_password') }}" placeholder="Por defecto 1234 si se deja vacío">
-			@error('owner_password')<div class="text-danger small">{{ $message }}</div>@enderror
-		</div>
-		<button class="btn btn-primary">Actualizar</button>
-		<a href="{{ route('towers.apartments.index',$tower) }}" class="btn btn-secondary ms-2">Volver</a>
-	</form>
+		</form>
+	</div>
+</div>
 
-		<hr class="my-4">
-		<div class="d-flex justify-content-between align-items-center mb-2">
-			<h2 class="h6 m-0">Propietarios actuales</h2>
-			<a class="btn btn-sm btn-outline-secondary" href="{{ route('ownerships.index',$apartment) }}">Gestionar Propietarios</a>
-		</div>
+<div class="card">
+	<div class="card-header d-flex justify-content-between align-items-center">
+		<span><i class="bi bi-people me-1"></i>Propietarios actuales</span>
+		<a class="btn btn-sm btn-outline-primary" href="{{ route('ownerships.index',$apartment) }}"><i class="bi bi-gear"></i> Gestionar</a>
+	</div>
+	<div class="card-body p-0">
 		@php($owners = $apartment->ownerships()->with('user')->get())
 		@if($owners->count() === 0)
-			<div class="alert alert-light">Este apartamento no tiene propietarios asociados.</div>
+			<div class="p-3 text-muted">Este apartamento no tiene propietarios asociados.</div>
 		@else
 			<div class="table-responsive">
-				<table class="table table-sm table-bordered">
-					<thead class="table-light">
+				<table class="table table-hover table-sm align-middle mb-0">
+					<thead>
 						<tr>
 							<th>Usuario</th>
 							<th>Email</th>
-								<th>Documento</th>
+							<th>Documento</th>
 							<th>Activo</th>
-								<th>Acciones</th>
+							<th>Acciones</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -73,38 +87,39 @@
 							<tr>
 								<td>{{ optional($own->user)->name }}</td>
 								<td>{{ optional($own->user)->email }}</td>
-																	<td>
-																		@if($own->user)
-																			<form method="POST" action="{{ route('users.update', $own->user) }}" class="d-flex align-items-center gap-2" onsubmit="return validateDoc(this)">
-																				@csrf @method('PUT')
-																				<select name="document_type" class="form-select form-select-sm" style="width:auto">
-																					<option value="cedula" {{ $own->user->document_type === 'cedula' ? 'selected' : '' }}>Cédula</option>
-																					<option value="pasaporte" {{ $own->user->document_type === 'pasaporte' ? 'selected' : '' }}>Pasaporte</option>
-																				</select>
-																				<input type="text" name="document_number" value="{{ $own->user->document_number }}" class="form-control form-control-sm" placeholder="Número" minlength="5">
-																				<button class="btn btn-sm btn-outline-primary">Guardar</button>
-																			</form>
-																		@else
-																			<span class="text-muted">Sin usuario</span>
-																		@endif
-																	</td>
+								<td>
+									@if($own->user)
+										<form method="POST" action="{{ route('users.update', $own->user) }}" class="d-flex align-items-center gap-2" onsubmit="return validateDoc(this)">
+											@csrf @method('PUT')
+											<select name="document_type" class="form-select form-select-sm" style="width:auto">
+												<option value="cedula" {{ $own->user->document_type === 'cedula' ? 'selected' : '' }}>Cédula</option>
+												<option value="pasaporte" {{ $own->user->document_type === 'pasaporte' ? 'selected' : '' }}>Pasaporte</option>
+											</select>
+											<input type="text" name="document_number" value="{{ $own->user->document_number }}" class="form-control form-control-sm" placeholder="Número" minlength="5">
+											<button class="btn btn-sm btn-outline-primary"><i class="bi bi-check"></i></button>
+										</form>
+									@else
+										<span class="text-muted">Sin usuario</span>
+									@endif
+								</td>
 								<td>
 									<span class="badge {{ ($own->active ?? true) ? 'bg-success' : 'bg-secondary' }}">{{ ($own->active ?? true) ? 'Sí' : 'No' }}</span>
 								</td>
-									<td>
-														<form method="POST" action="{{ route('ownerships.toggle', [$apartment, $own]) }}" style="display:inline" onsubmit="return confirm('¿Seguro que quieres cambiar el estado del propietario?')">
-											@csrf @method('PATCH')
-											<button class="btn btn-sm {{ ($own->active ?? true) ? 'btn-outline-warning' : 'btn-outline-success' }}">
-												{{ ($own->active ?? true) ? 'Desactivar' : 'Activar' }}
-											</button>
-										</form>
-									</td>
+								<td>
+									<form method="POST" action="{{ route('ownerships.toggle', [$apartment, $own]) }}" style="display:inline" onsubmit="return confirm('¿Seguro que quieres cambiar el estado del propietario?')">
+										@csrf @method('PATCH')
+										<button class="btn btn-sm {{ ($own->active ?? true) ? 'btn-outline-warning' : 'btn-outline-success' }}">
+											{{ ($own->active ?? true) ? 'Desactivar' : 'Activar' }}
+										</button>
+									</form>
+								</td>
 							</tr>
 						@endforeach
 					</tbody>
 				</table>
 			</div>
 		@endif
+	</div>
 </div>
 @endsection
 

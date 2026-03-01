@@ -5,7 +5,7 @@ use Illuminate\Http\Request;
 
 class ApartmentController extends Controller {
     public function index(Tower $tower){ 
-        $apartments=$tower->apartments()->orderBy('code')->paginate(40); 
+        $apartments=$tower->apartments()->orderBy('code')->paginate(10); 
         \Log::info('Apartments index', [
             'tower_id'=>$tower->id,
             'count'=>$apartments->total(),
@@ -93,5 +93,14 @@ class ApartmentController extends Controller {
         $tower = $apartment->tower; 
         $apartment->delete(); 
         return redirect()->route('towers.apartments.index',$tower)->with('status','Apartamento eliminado'); 
+    }
+
+    public function bulkDestroy(Request $r, Tower $tower){
+        $ids = $r->input('ids', []);
+        if (empty($ids)) {
+            return redirect()->route('towers.apartments.index', $tower)->with('status','No se seleccionaron apartamentos');
+        }
+        $count = $tower->apartments()->whereIn('id', $ids)->delete();
+        return redirect()->route('towers.apartments.index', $tower)->with('status', $count.' apartamento(s) eliminado(s)');
     }
 }

@@ -8,40 +8,48 @@ use App\Services\BillingService;
 
 class InvoiceController extends Controller {
     public function index(Request $request){
-        $this->authorize('create', Invoice::class); // reutilizamos permiso
+        $this->authorize('viewAny', Invoice::class);
+        $user = auth()->user();
+        $isAdmin = $user->hasRole('super_admin') || $user->hasRole('condo_admin') || $user->hasRole('tower_admin');
         $q = Invoice::query()
             ->with(['tower','apartment.tower','children.apartment.tower'])
             ->withCount('children');
+
+        // Owners/residents: only see their own sub-invoices (child invoices)
+        if(!$isAdmin){
+            $ownedAptIds = \App\Models\Ownership::where('user_id',$user->id)->pluck('apartment_id');
+            $q->whereNotNull('parent_id')->whereIn('apartment_id', $ownedAptIds);
+        }
         if($request->filled('period')){ $q->where('period',$request->get('period')); }
         if($request->filled('status')){ $q->where('status',$request->get('status')); }
-        if($request->filled('tower_id')){ $q->where('tower_id',$request->get('tower_id')); }
-        // Por defecto: mostrar solo facturas padre (no listar hijas en el listado principal)
-        $type = $request->get('type', 'parent');
-        if($type === 'all'){
-            // sin filtro
-        } elseif($type === 'child') {
-            $q->whereNotNull('parent_id');
-        } else {
-            // parent (default)
-            $q->whereNull('parent_id');
-        }
+        // Admin-only filters
+        if($isAdmin){
+            if($request->filled('tower_id')){ $q->where('tower_id',$request->get('tower_id')); }
+            // Por defecto: mostrar solo facturas padre (no listar hijas en el listado principal)
+            $type = $request->get('type', 'parent');
+            if($type === 'all'){
+                // sin filtro
+            } elseif($type === 'child') {
+                $q->whereNotNull('parent_id');
+            } else {
+                // parent (default)
+                $q->whereNull('parent_id');
+            }
 
-        // Compatibilidad hacia atrás: si alguien usa filtros antiguos
-        if($request->filled('type')){
-            $legacy = $request->get('type');
-            if($legacy==='simple'){
-                $q->whereNull('parent_id')->whereDoesntHave('children');
+            // Compatibilidad hacia atrás: si alguien usa filtros antiguos
+            if($request->filled('type')){
+                $legacy = $request->get('type');
+                if($legacy==='simple'){
+                    $q->whereNull('parent_id')->whereDoesntHave('children');
+                }
             }
-            if($legacy==='parent'){
-                // ya aplica whereNull('parent_id') arriba; no forzamos whereHas('children')
-            }
+            if($request->filled('created_from')){ $q->whereDate('created_at','>=',$request->get('created_from')); }
+            if($request->filled('created_to')){ $q->whereDate('created_at','<=',$request->get('created_to')); }
         }
-        if($request->filled('created_from')){ $q->whereDate('created_at','>=',$request->get('created_from')); }
-        if($request->filled('created_to')){ $q->whereDate('created_at','<=',$request->get('created_to')); }
         $perPage=(int)$request->get('per_page',20); if(!in_array($perPage,[10,20,50])){ $perPage=20; }
         $invoices=$q->orderByDesc('id')->paginate($perPage)->appends($request->query());
-        $towers = Tower::orderBy('name')->get();
-        return view('invoices.index', compact('invoices','towers'));
+        $towers = $isAdmin ? Tower::orderBy('name')->get() : collect();
+        return view('invoices.index', compact('invoices','towers','isAdmin'));
     }
     public function pdf(Invoice $invoice){ 
         $this->authorize('view',$invoice); 
@@ -160,11 +168,29 @@ class InvoiceController extends Controller {
 
             // Preload apartment info for numbering + tower assignment
             $aptRows = \App\Models\Apartment::whereIn('id', $itemsByApt->keys())->get(['id','code','tower_id'])->keyBy('id');
+
+            // Preload active owners for snapshot
+            $ownersByApt = \App\Models\Ownership::whereIn('apartment_id', $itemsByApt->keys())
+                ->where('active', true)
+                ->where('role', 'owner')
+                ->with('user:id,name,email,document_type,document_number')
+                ->get()
+                ->keyBy('apartment_id');
+
             $childInvoices = collect();
             foreach($itemsByApt as $apartmentId=>$rows){
                 $totalUsd = round($rows->sum('subtotal_usd'),2);
                 $aptCode = optional($aptRows->get($apartmentId))->code ?? ('APT-'.$apartmentId);
                 $childTowerId = $invoice->tower_id ?? optional($aptRows->get($apartmentId))->tower_id;
+
+                // Snapshot del propietario activo
+                $ownerUser = optional(optional($ownersByApt->get($apartmentId))->user);
+                $ownerName = $ownerUser->name;
+                $ownerEmail = $ownerUser->email;
+                $docType = $ownerUser->document_type;
+                $docNum  = $ownerUser->document_number;
+                $ownerDocument = ($docType && $docNum) ? ($docType . '-' . $docNum) : $docNum;
+
                 // Generar número base y asegurar unicidad con sufijo incremental si existe
                 $baseNumber = 'INV-'.$invoice->period.'-'.$aptCode;
                 $number = $baseNumber;
@@ -189,6 +215,9 @@ class InvoiceController extends Controller {
                     'exchange_rate_used'=> $usedRate,
                     'total_usd'         => $totalUsd,
                     'total_ves'         => round($totalUsd * $usedRate, 2),
+                    'owner_name'        => $ownerName,
+                    'owner_email'       => $ownerEmail,
+                    'owner_document'    => $ownerDocument,
                 ]);
                 // Copiar items de ese apartamento a la sub-factura
                 foreach($rows as $row){
@@ -293,7 +322,7 @@ class InvoiceController extends Controller {
     public function store(Request $r, BillingService $billing){
         $this->authorize('store',Invoice::class);
         $data=$r->validate([
-            'tower_id'        =>'nullable|exists:towers,id',
+            'tower_id'        =>'nullable|exists:tenant.towers,id',
             'period'          =>'required|date_format:Y-m',
             'apartment_ids'   =>'nullable|array',
             'items_payload'   =>'nullable|string',
@@ -331,7 +360,7 @@ class InvoiceController extends Controller {
         $this->authorize('update',$invoice);
         if($invoice->status!=='draft'){ return redirect()->route('invoices.show',$invoice)->with('status','Solo se puede editar en borrador'); }
         $data=$r->validate([
-            'tower_id'        =>'nullable|exists:towers,id',
+            'tower_id'        =>'nullable|exists:tenant.towers,id',
             'period'          =>'required|date_format:Y-m',
             'apartment_ids'   =>'nullable|array',
             'items_payload'   =>'nullable|string',

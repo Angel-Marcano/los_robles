@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Invoice extends Model
 {
     use HasFactory, SoftDeletes, \App\Models\Traits\UsesTenantConnection;
-    protected $fillable=['number','parent_id','apartment_id','tower_id','created_by','period','due_date','status','late_fee_type','late_fee_scope','late_fee_value','late_fee_accrued_usd','late_fee_accrued_ves','exchange_rate_used','total_usd','total_ves','paid_at','paid_exchange_rate'];
+    protected $fillable=['number','parent_id','apartment_id','tower_id','created_by','period','due_date','status','late_fee_type','late_fee_scope','late_fee_value','late_fee_accrued_usd','late_fee_accrued_ves','exchange_rate_used','total_usd','total_ves','paid_at','paid_exchange_rate','owner_name','owner_email','owner_document'];
     protected $casts=['paid_at'=>'datetime','due_date'=>'date','total_usd'=>'decimal:2','total_ves'=>'decimal:2','late_fee_value'=>'decimal:2','late_fee_accrued_usd'=>'decimal:2','late_fee_accrued_ves'=>'decimal:2','paid_exchange_rate'=>'decimal:6'];
 
     public function statusLabel(): string

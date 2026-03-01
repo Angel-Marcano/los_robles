@@ -1,16 +1,5 @@
 @extends('layouts.app')
 @section('content')
-<div class="container py-3">
-	@if(session('status'))
-		<div class="alert alert-success">{{ session('status') }}</div>
-	@endif
-
-	@if($errors->any())
-		<div class="alert alert-danger">
-			<ul class="mb-0">
-				@foreach($errors->all() as $e)
-					<li>{{ $e }}</li>
-			$approvedPaidUsdEq += (float) $pr->usdEquivalent();
 	@php
 		$currentRate = \App\Models\CurrencyRate::where('active', true)->orderByDesc('valid_from')->first();
 		$lateUsd = $invoice->computeLateFeeUsd();
@@ -21,20 +10,20 @@
 		$totalVesVar = number_format($myTotalUsd * $effectiveRate, 2);
 	@endphp
 
-	<div class="d-flex align-items-center justify-content-between mb-3">
+	<div class="d-flex align-items-center justify-content-between page-header">
 		<div>
-			<h2 class="h4 mb-1">Factura #{{ $invoice->id }}</h2>
+			<h1><i class="bi bi-receipt me-2"></i>Factura #{{ $invoice->id }}</h1>
 			<div class="text-muted">Periodo: {{ $invoice->period }} | Vence: {{ $invoice->due_date ? $invoice->due_date->format('Y-m-d') : 'N/D' }}</div>
 		</div>
 		<div>
 			@php
-				$badgeClass = ($invoice->status === 'paid')
-					? 'success'
-					: (($invoice->status === 'pending')
-						? 'warning'
-						: (($invoice->status === 'draft') ? 'secondary' : 'secondary'));
+				$badgeClass = match($invoice->status) {
+					'paid' => 'success',
+					'pending' => 'warning',
+					default => 'secondary',
+				};
 			@endphp
-			<span class="badge bg-{{ $badgeClass }}">{{ $invoice->statusLabel() }}</span>
+			<span class="badge bg-{{ $badgeClass }} fs-6">{{ $invoice->statusLabel() }}</span>
 		</div>
 	</div>
 
@@ -47,6 +36,11 @@
 						<strong>{{ $invoice->apartment->code }}</strong>
 					@endif
 					(generada desde la factura #{{ $invoice->parent_id }}).
+					@if($invoice->owner_name)
+						<br><i class="bi bi-person me-1"></i>Propietario: <strong>{{ $invoice->owner_name }}</strong>
+						@if($invoice->owner_document) — {{ $invoice->owner_document }} @endif
+						@if($invoice->owner_email) — {{ $invoice->owner_email }} @endif
+					@endif
 				</div>
 			@endif
 			<div class="row g-3">
@@ -55,7 +49,7 @@
 					<div class="d-flex justify-content-between"><span class="text-muted">Total VES:</span>
 						<strong>
 							@if($invoice->status==='paid')
-								{{ number_format($myTotalVes,2) }} <span class="text-muted">(tasa pagada {{ $invoice->paid_exchange_rate }})</span>
+								{{ number_format($myTotalVes,2) }} <span class="text-muted">(tasa pagada {{ number_format((float)$invoice->paid_exchange_rate, 2) }})</span>
 							@else
 								{{ $totalVesVar }} <span class="text-muted">(variable)</span>
 							@endif
@@ -101,11 +95,14 @@
 		</div>
 	</div>
 
-	<div class="d-flex gap-2 mb-3">
-		<a class="btn btn-outline-primary" href="{{ route('invoices.pdf',$invoice) }}" target="_blank">Ver PDF</a>
+	<div class="d-flex flex-wrap gap-2 mb-3">
+		<a class="btn btn-outline-primary btn-action" href="{{ route('invoices.pdf',$invoice) }}" target="_blank"><i class="bi bi-file-pdf"></i> Ver PDF</a>
+		@can('update', $invoice)
 			@if($invoice->status==='draft')
-				<a class="btn btn-primary" href="{{ route('invoices.edit',$invoice) }}">Editar</a>
+				<a class="btn btn-primary btn-action" href="{{ route('invoices.edit',$invoice) }}"><i class="bi bi-pencil"></i> Editar</a>
 			@endif
+		@endcan
+		@can('create', App\Models\Invoice::class)
 		@if($invoice->status==='draft')
 			<form method="POST" action="{{ route('invoices.approve',$invoice) }}">@csrf @method('PATCH')
 				<button class="btn btn-success" onclick="return confirm('¿Aprobar factura y notificar a propietarios?')">Aprobar</button>
@@ -154,15 +151,39 @@
 					</form>
 				@endif
 			@endif
+		@endif
+		@endcan
+		@if($invoice->status==='pending')
 			<a class="btn btn-info" href="{{ route('payments.create',$invoice) }}">Registrar abono</a>
 		@endif
 	</div>
 
 	<div class="card">
-		<div class="card-header">Detalle de ítems</div>
+		<div class="card-header d-flex justify-content-between align-items-center">
+			<span><i class="bi bi-list-ul me-1"></i>Detalle de ítems</span>
+			<span class="text-muted small">{{ $visibleItems->count() }} ítem(s)</span>
+		</div>
+		@if($visibleItems->count() > 10)
+		<div class="card-body py-2 border-bottom d-flex align-items-center gap-3 flex-wrap">
+			<div class="input-group input-group-sm" style="max-width:220px;">
+				<span class="input-group-text"><i class="bi bi-search"></i></span>
+				<input type="text" id="itemSearch" class="form-control" placeholder="Buscar apto o concepto...">
+			</div>
+			<div class="d-flex align-items-center gap-2">
+				<label class="form-label mb-0 small text-muted">Mostrar</label>
+				<select id="itemsPerPage" class="form-select form-select-sm" style="width:auto;">
+					<option value="10">10</option>
+					<option value="25">25</option>
+					<option value="50">50</option>
+					<option value="0">Todos</option>
+				</select>
+			</div>
+			<nav id="itemsPagination" class="ms-auto"></nav>
+		</div>
+		@endif
 		<div class="card-body p-0">
 			<div class="table-responsive">
-				<table class="table table-sm table-striped mb-0">
+				<table class="table table-hover table-sm align-middle mb-0">
 					<thead>
 						<tr>
 							<th>Apto</th>
@@ -172,9 +193,11 @@
 							<th class="text-end">VES (creación)</th>
 						</tr>
 					</thead>
-					<tbody>
+					<tbody id="itemsBody">
 					@forelse($visibleItems as $it)
-						<tr>
+						<tr class="item-row"
+							data-apto="{{ strtolower($it->apartment->code ?? $it->apartment_id) }}"
+							data-concepto="{{ strtolower($it->expenseItem->name ?? '') }}">
 							<td>{{ $it->apartment->code ?? ('#'.$it->apartment_id) }}</td>
 							<td>{{ $it->expenseItem->name ?? ('Item '.$it->expense_item_id) }}</td>
 							<td>{{ (($it->expenseItem->type ?? 'fixed') === 'aliquot') ? 'Alícuota' : 'Fijo' }}</td>
@@ -192,10 +215,31 @@
 
 	@if(!$invoice->parent_id && ($invoice->children && $invoice->children->count()))
 	<div class="card mt-3" id="child-list">
-		<div class="card-header">Sub-facturas por apartamento</div>
+		<div class="card-header d-flex justify-content-between align-items-center">
+			<span><i class="bi bi-diagram-3 me-1"></i>Sub-facturas por apartamento</span>
+			<span class="text-muted small">{{ $invoice->children->count() }} sub-factura(s)</span>
+		</div>
+		@if($invoice->children->count() > 10)
+		<div class="card-body py-2 border-bottom d-flex align-items-center gap-3 flex-wrap">
+			<div class="input-group input-group-sm" style="max-width:220px;">
+				<span class="input-group-text"><i class="bi bi-search"></i></span>
+				<input type="text" id="childSearch" class="form-control" placeholder="Buscar apartamento...">
+			</div>
+			<div class="d-flex align-items-center gap-2">
+				<label class="form-label mb-0 small text-muted">Mostrar</label>
+				<select id="childPerPage" class="form-select form-select-sm" style="width:auto;">
+					<option value="10">10</option>
+					<option value="25">25</option>
+					<option value="50">50</option>
+					<option value="0">Todos</option>
+				</select>
+			</div>
+			<nav id="childPagination" class="ms-auto"></nav>
+		</div>
+		@endif
 		<div class="card-body p-0">
 			<div class="table-responsive">
-				<table class="table table-sm table-striped mb-0">
+				<table class="table table-hover table-sm align-middle mb-0">
 					<thead>
 						<tr>
 							<th>Número</th>
@@ -205,9 +249,9 @@
 							<th style="width:100px"></th>
 						</tr>
 					</thead>
-					<tbody>
+					<tbody id="childBody">
 							@foreach($invoice->children as $child)
-						<tr>
+						<tr class="child-row" data-apto="{{ strtolower($child->apartment->code ?? $child->apartment_id) }}">
 							<td>{{ $child->number ?? ('#'.$child->id) }}</td>
 							<td>{{ $child->apartment->code ?? ('#'.$child->apartment_id) }}</td>
 							<td class="text-end">{{ number_format($child->total_usd,2) }}</td>
@@ -217,7 +261,7 @@
 										: (($child->status === 'pending') ? 'warning' : 'secondary');
 								@endphp
 							<td><span class="badge bg-{{ $childBadge }}">{{ $child->statusLabel() }}</span></td>
-							<td class="text-end"><a href="{{ route('invoices.show',$child) }}" class="btn btn-sm btn-outline-primary">Ver</a></td>
+							<td class="text-end"><a href="{{ route('invoices.show',$child) }}" class="btn btn-sm btn-outline-primary btn-action"><i class="bi bi-eye"></i> Ver</a></td>
 						</tr>
 						@endforeach
 					</tbody>
@@ -241,7 +285,7 @@
 		$remainingUsdEqSummary = max(0.0, round($dueUsdForSummary - (float) $approvedPaidUsdEqSummary, 2));
 	@endphp
 	<div class="card mt-3">
-		<div class="card-header">Pagos registrados ({{ $paymentReports->count() }})</div>
+		<div class="card-header"><i class="bi bi-cash-coin me-1"></i>Pagos registrados ({{ $paymentReports->count() }})</div>
 		<div class="card-body">
 			<div class="row g-2 mb-2">
 				<div class="col-md-6"><small class="text-muted">Total aprobado (USD equiv)</small><div><strong>{{ number_format($approvedPaidUsdEqSummary,2) }}</strong></div></div>
@@ -251,7 +295,7 @@
 				<div class="text-muted">Sin pagos registrados.</div>
 			@else
 				<div class="table-responsive">
-					<table class="table table-sm table-striped mb-0">
+					<table class="table table-hover table-sm align-middle mb-0">
 						<thead>
 							<tr>
 								<th>#</th>
@@ -277,17 +321,17 @@
 									<td class="text-end">{{ number_format((float)$pr->usdEquivalent(), 2) }}</td>
 									<td class="text-end">{{ number_format((float)$pr->amount_usd, 2) }}</td>
 									<td class="text-end">{{ number_format((float)$pr->amount_ves, 2) }}</td>
-									<td class="text-end">{{ number_format((float)$pr->exchange_rate_used, 6) }}</td>
+									<td class="text-end">{{ number_format((float)$pr->exchange_rate_used, 2) }}</td>
 									<td class="text-end">
-										<div class="btn-group" role="group" aria-label="Acciones de pago">
+										<div class="d-flex justify-content-end gap-1" role="group" aria-label="Acciones de pago">
 											@can('approve', $pr)
 												<a class="btn btn-sm btn-outline-primary" href="{{ route('payments.review', $pr) }}">Revisar</a>
 												@if(($pr->status ?? null) === 'reported')
-													<form method="POST" action="{{ route('payments.approve', $pr) }}" style="display:inline">@csrf @method('PATCH')
+													<form method="POST" action="{{ route('payments.approve', $pr) }}">@csrf @method('PATCH')
 														<button class="btn btn-sm btn-success" onclick="return confirm('¿Aprobar este abono?')">Aprobar</button>
 													</form>
 													@can('reject', $pr)
-														<form method="POST" action="{{ route('payments.reject', $pr) }}" style="display:inline">@csrf @method('PATCH')
+														<form method="POST" action="{{ route('payments.reject', $pr) }}">@csrf @method('PATCH')
 															<button class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Rechazar este abono?')">Rechazar</button>
 														</form>
 													@endcan
@@ -304,6 +348,82 @@
 		</div>
 	</div>
 
-</div>
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+	// Reusable client-side paginator
+	function initPaginator(cfg){
+		const rows = Array.from(document.querySelectorAll(cfg.rowSelector));
+		if(rows.length <= 10 && !cfg.forceInit) return;
+		const searchInput = document.getElementById(cfg.searchId);
+		const perPageSelect = document.getElementById(cfg.perPageId);
+		const paginationNav = document.getElementById(cfg.paginationId);
+		if(!searchInput || !perPageSelect || !paginationNav) return;
+		let currentPage = 1;
+
+		function getFiltered(){
+			const q = (searchInput.value || '').toLowerCase();
+			if(!q) return rows;
+			return rows.filter(r => {
+				return (cfg.searchFields || []).some(f => (r.dataset[f]||'').includes(q));
+			});
+		}
+		function render(){
+			const filtered = getFiltered();
+			const perPage = parseInt(perPageSelect.value) || 0;
+			const totalPages = perPage > 0 ? Math.ceil(filtered.length / perPage) : 1;
+			if(currentPage > totalPages) currentPage = totalPages || 1;
+			rows.forEach(r => r.style.display = 'none');
+			if(perPage === 0){
+				filtered.forEach(r => r.style.display = '');
+			} else {
+				const start = (currentPage - 1) * perPage;
+				filtered.slice(start, start + perPage).forEach(r => r.style.display = '');
+			}
+			if(totalPages <= 1){ paginationNav.innerHTML = ''; return; }
+			let html = '<ul class="pagination pagination-sm mb-0">';
+			html += '<li class="page-item '+(currentPage===1?'disabled':'')+'"><a class="page-link" href="#" data-p="'+(currentPage-1)+'">&laquo;</a></li>';
+			let startP = Math.max(1, currentPage - 3), endP = Math.min(totalPages, startP + 6);
+			if(endP - startP < 6) startP = Math.max(1, endP - 6);
+			for(let p = startP; p <= endP; p++){
+				html += '<li class="page-item '+(p===currentPage?'active':'')+'"><a class="page-link" href="#" data-p="'+p+'">'+p+'</a></li>';
+			}
+			html += '<li class="page-item '+(currentPage===totalPages?'disabled':'')+'"><a class="page-link" href="#" data-p="'+(currentPage+1)+'">&raquo;</a></li>';
+			html += '</ul>';
+			paginationNav.innerHTML = html;
+			paginationNav.querySelectorAll('a[data-p]').forEach(a => {
+				a.addEventListener('click', function(e){
+					e.preventDefault();
+					const p = parseInt(this.dataset.p);
+					if(p >= 1 && p <= totalPages){ currentPage = p; render(); }
+				});
+			});
+		}
+		searchInput.addEventListener('input', function(){ currentPage = 1; render(); });
+		perPageSelect.addEventListener('change', function(){ currentPage = 1; render(); });
+		render();
+	}
+
+	// Items table
+	initPaginator({
+		rowSelector: '#itemsBody .item-row',
+		searchId: 'itemSearch',
+		perPageId: 'itemsPerPage',
+		paginationId: 'itemsPagination',
+		searchFields: ['apto','concepto']
+	});
+
+	// Sub-facturas table
+	initPaginator({
+		rowSelector: '#childBody .child-row',
+		searchId: 'childSearch',
+		perPageId: 'childPerPage',
+		paginationId: 'childPagination',
+		searchFields: ['apto']
+	});
+});
+</script>
+@endpush
+
 @endsection
 

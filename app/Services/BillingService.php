@@ -68,11 +68,10 @@ class BillingService {
                             'subtotal_ves'    => $subtotal * ($rate->rate ?? 0),
                         ]);
                     }
-                } else { // equal distribution
-                    $count = max(1, $apartmentsForItem->count());
-                    $portionEach = $count > 0 ? round(($totalAmount * $quantity) / $count, 2) : 0;
+                } else { // equal distribution: cada apartamento paga el monto completo
+                    $perApt = round($totalAmount * $quantity, 2);
                     foreach($apartmentsForItem as $ap){
-                        $totalUsd += $portionEach;
+                        $totalUsd += $perApt;
                         InvoiceItem::create([
                             'invoice_id'      => $invoice->id,
                             'apartment_id'    => $ap->id,
@@ -80,8 +79,8 @@ class BillingService {
                             'base_amount_usd' => $totalAmount,
                             'quantity'        => $quantity,
                             'distributed'     => false,
-                            'subtotal_usd'    => $portionEach,
-                            'subtotal_ves'    => $portionEach * ($rate->rate ?? 0),
+                            'subtotal_usd'    => $perApt,
+                            'subtotal_ves'    => $perApt * ($rate->rate ?? 0),
                         ]);
                     }
                 }

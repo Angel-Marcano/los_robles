@@ -90,19 +90,116 @@ Para entorno local puedes mapear hosts en tu archivo `hosts`:
 
 En producción: crear registros A/Wildcard (`*.midominio.com`) apuntando al load balancer o servidor.
 
-## Seeds iniciales sugeridos (no incluidos aún)
+## Comandos Artisan para Tenants
 
-Se pueden crear comandos para poblar:
-- Torres y apartamentos base.
-- Ítems de gasto frecuentes (mantenimiento, limpieza, seguridad, agua, electricidad).
-- Tasa de cambio inicial.
+### 1. Crear un nuevo condominio (tenant)
+
+```bash
+php artisan tenants:create {name} {subdomain} [--db=nombre_bd] [--seed]
+```
+
+Ejemplo:
+
+```bash
+php artisan tenants:create "Los Robles" losrobles --db=db_losrobles --seed
+```
+
+Esto:
+- Inserta registro en `condominiums` con `subdomain`, `db_name` y `active`.
+- Crea la base de datos física (requiere privilegios MySQL).
+- Ejecuta migraciones tenant.
+- Con `--seed` ejecuta seeders iniciales.
+
+### 2. Poblar torres, apartamentos y usuarios
+
+```bash
+php artisan tenants:seed-structure {subdomain} [--towers=A,B,C] [--domain=user.com] [--password=12345678] [--dry-run]
+```
+
+Ejemplo completo:
+
+```bash
+php artisan tenants:seed-structure losrobles --towers=A,B,C --domain=losrobles.com --password=12345678
+```
+
+| Opción | Default | Descripción |
+|--------|---------|-------------|
+| `--towers=A,B,C` | `A,B,C` | Torres a crear (separadas por coma) |
+| `--domain=user.com` | `user.com` | Dominio para emails auto-generados |
+| `--password=12345678` | `12345678` | Contraseña de usuarios creados |
+| `--dry-run` | – | Solo muestra qué haría, sin escribir en BD |
+
+**¿Qué crea por cada torre?** (ej. Torre A):
+
+| Recurso | Detalle |
+|---------|---------|
+| Torre | `Torre A` |
+| Apartamentos | `A-01` a `A-04` (PB), `A-11` a `A-44` (pisos 1-4), `A-51` a `A-54` (piso 5) |
+| Alícuotas | PB: 4.406% (01,02,04), 3.385% (03); Pisos 1-4: 4.084%; Piso 5: 4.514% |
+| Usuarios | `user_A_01@losrobles.com`, `user_A_02@losrobles.com`, etc. |
+| Ownerships | Cada usuario asignado como `owner` de su apartamento |
+
+Para ver el resultado sin modificar la BD:
+
+```bash
+php artisan tenants:seed-structure losrobles --towers=A,B,C --dry-run
+```
+
+### 3. Crear roles en todos los tenants
+
+```bash
+php artisan tenants:seed-roles
+```
+
+Crea los roles `super_admin`, `condo_admin`, `tower_admin` en cada BD tenant activa (idempotente).
+
+### 4. Crear admin en todos los tenants
+
+```bash
+php artisan tenants:seed-admins [--password=1234]
+```
+
+Crea usuario `admin@admin.com` con rol `super_admin` en cada BD tenant que no lo tenga.
+
+### 5. Migrar todos los tenants
+
+```bash
+php artisan tenants:migrate
+```
+
+Ejecuta las migraciones de `database/migrations/tenant` en todas las BDs tenant activas.
+
+## Setup completo desde cero (ejemplo)
+
+```bash
+# 1. Crear el tenant
+php artisan tenants:create "Los Robles" losrobles --db=db_losrobles
+
+# 2. Crear roles base
+php artisan tenants:seed-roles
+
+# 3. Crear usuario administrador (admin@admin.com / 1234)
+php artisan tenants:seed-admins --password=1234
+
+# 4. Poblar torres A, B, C con apartamentos y usuarios
+php artisan tenants:seed-structure losrobles --towers=A,B,C --domain=losrobles.com --password=12345678
+
+# 5. Configurar hosts (Windows: C:\Windows\System32\drivers\etc\hosts)
+#    127.0.0.1    losrobles.localhost
+
+# 6. Acceder en navegador: http://losrobles.localhost
+#    Login admin: admin@admin.com / 1234
+#    Login usuario: user_A_01@losrobles.com / 12345678
+```
 
 ## Testing rápido
 
-1. Crear condominio: `php artisan tenants:create "Condo Demo" demo_condo db_demo_condo`.
-2. Edita tu archivo hosts para apuntar `demo_condo.local.test`.
-3. Accede vía navegador al subdominio y genera invoice.
-4. Verifica tabla `invoices` en DB `db_demo_condo`.
+1. Crear condominio: `php artisan tenants:create "Condo Demo" demo --db=db_demo`.
+2. Poblar estructura: `php artisan tenants:seed-structure demo --towers=A,B`.
+3. Crear admin: `php artisan tenants:seed-admins`.
+4. Edita tu archivo hosts: `127.0.0.1 demo.localhost`.
+5. Accede vía navegador a `http://demo.localhost` y genera facturas.
+6. Verifica tabla `invoices` en DB `db_demo`.
 
 ## Consideraciones y Próximos Pasos
 

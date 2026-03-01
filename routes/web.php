@@ -13,10 +13,10 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', function () { return view('welcome'); });
+Route::get('/', function () { return redirect()->route('login'); });
 // Auth routes (minimal)
-Route::get('login', [\App\Http\Controllers\Auth\LoginController::class,'showLogin'])->name('login');
-Route::post('login', [\App\Http\Controllers\Auth\LoginController::class,'login'])->name('login.perform');
+Route::get('login', [\App\Http\Controllers\Auth\LoginController::class,'showLogin'])->middleware('guest')->name('login');
+Route::post('login', [\App\Http\Controllers\Auth\LoginController::class,'login'])->middleware('guest')->name('login.perform');
 Route::post('logout', [\App\Http\Controllers\Auth\LoginController::class,'logout'])->name('logout');
 // Debug temporal de sesión y host (solo en entorno local)
 if (env('APP_DEBUG')) {
@@ -64,6 +64,10 @@ Route::middleware(['auth'])->prefix('invoices')->group(function(){
     Route::get('{invoice}/payments/create', [\App\Http\Controllers\PaymentReportController::class,'create'])->name('payments.create');
     Route::post('{invoice}/payments', [\App\Http\Controllers\PaymentReportController::class,'store'])->name('payments.store');
 });
+// Profile
+Route::middleware(['auth'])->get('profile', [\App\Http\Controllers\ProfileController::class,'edit'])->name('profile.edit');
+Route::middleware(['auth'])->patch('profile', [\App\Http\Controllers\ProfileController::class,'update'])->name('profile.update');
+Route::middleware(['auth'])->patch('profile/password', [\App\Http\Controllers\ProfileController::class,'updatePassword'])->name('profile.password');
 // Users
 Route::middleware(['auth'])->resource('users', \App\Http\Controllers\UserController::class);
 Route::patch('users/{user}/toggle', [\App\Http\Controllers\UserController::class,'toggle'])->name('users.toggle');
@@ -72,6 +76,7 @@ Route::middleware(['auth'])->resource('condominiums', \App\Http\Controllers\Cond
 // Torres y Apartamentos (tenant context)
 Route::middleware(['auth'])->resource('towers', \App\Http\Controllers\TowerController::class)->except(['show']);
 Route::middleware(['auth'])->resource('towers.apartments', \App\Http\Controllers\ApartmentController::class)->shallow()->except(['show']);
+Route::middleware(['auth'])->delete('towers/{tower}/apartments-bulk',  [\App\Http\Controllers\ApartmentController::class,'bulkDestroy'])->name('apartments.bulkDestroy');
 // Ownerships nested under apartment
 Route::middleware(['auth'])->get('apartments/{apartment}/ownerships',[\App\Http\Controllers\OwnershipController::class,'index'])->name('ownerships.index');
 Route::middleware(['auth'])->post('apartments/{apartment}/ownerships',[\App\Http\Controllers\OwnershipController::class,'store'])->name('ownerships.store');
@@ -115,4 +120,8 @@ Route::get('password/reset/{token}',[\App\Http\Controllers\PasswordResetControll
 Route::post('password/reset',[\App\Http\Controllers\PasswordResetController::class,'performReset']);
 // Auditoría
 Route::middleware(['auth'])->get('audit-logs',[\App\Http\Controllers\AuditLogController::class,'index'])->name('audit.logs.index'); // export CSV via ?export=csv
+
+// Reportes
+Route::middleware(['auth'])->get('reports/debtors-monthly', [\App\Http\Controllers\ReportController::class, 'debtorsMonthly'])->name('reports.debtorsMonthly');
+Route::middleware(['auth'])->get('reports/debtors-monthly/pdf', [\App\Http\Controllers\ReportController::class, 'debtorsMonthlyPdf'])->name('reports.debtorsMonthlyPdf');
 

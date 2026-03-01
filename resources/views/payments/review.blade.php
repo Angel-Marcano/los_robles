@@ -1,9 +1,9 @@
 @extends('layouts.app')
 
 @section('content')
-	<div class="d-flex align-items-center justify-content-between mb-3">
-		<h1 class="h4 mb-0">Revisar Pago #{{ $paymentReport->id }}</h1>
-		<a href="{{ route('invoices.show', $paymentReport->invoice_id) }}" class="btn btn-outline-secondary btn-sm">Volver</a>
+	<div class="d-flex align-items-center justify-content-between page-header">
+		<h1><i class="bi bi-search me-2"></i>Revisar Pago #{{ $paymentReport->id }}</h1>
+		<a href="{{ route('invoices.show', $paymentReport->invoice_id) }}" class="btn btn-outline-secondary btn-action"><i class="bi bi-arrow-left"></i> Volver</a>
 	</div>
 
 	<div class="card">
@@ -46,13 +46,13 @@
 					<form method="POST" action="{{ route('payments.approve', $paymentReport) }}">
 						@csrf
 						@method('PATCH')
-						<button class="btn btn-success" onclick="return confirm('¿Aprobar este pago?')">Aprobar</button>
+						<button class="btn btn-success btn-action" onclick="return confirm('¿Aprobar este pago?')"><i class="bi bi-check-circle"></i> Aprobar</button>
 					</form>
 
 					<form method="POST" action="{{ route('payments.reject', $paymentReport) }}">
 						@csrf
 						@method('PATCH')
-						<button class="btn btn-danger" onclick="return confirm('¿Rechazar este pago?')">Rechazar</button>
+						<button class="btn btn-danger btn-action" onclick="return confirm('¿Rechazar este pago?')"><i class="bi bi-x-circle"></i> Rechazar</button>
 					</form>
 				</div>
 			@endif

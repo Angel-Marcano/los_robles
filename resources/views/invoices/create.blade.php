@@ -1,7 +1,9 @@
 @extends('layouts.app')
 @section('content')
-<div class="container">
-	<h1 class="mb-4">Nueva Factura</h1>
+<div class="d-flex justify-content-between align-items-center page-header">
+	<h1><i class="bi bi-receipt me-2"></i>Nueva Factura</h1>
+	<a class="btn btn-outline-secondary btn-action" href="{{route('invoices.index')}}"><i class="bi bi-arrow-left"></i> Volver</a>
+</div>
 	<form method="GET" action="{{route('invoices.create')}}" class="row g-3 mb-4 align-items-end">
 		@if(auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('condo_admin'))
 		<div class="col-md-4">
@@ -15,28 +17,63 @@
 		</div>
 		@endif
 	</form>
-	<form method="POST" action="{{route('invoices.store')}}" class="card p-4 shadow-sm">
+	<form method="POST" action="{{route('invoices.store')}}" class="card">
+		<div class="card-body">
 		@csrf
 		@if($selectedTower)<input type="hidden" name="tower_id" value="{{$selectedTower->id}}">@endif
 		<div class="mb-3">
-			<label class="form-label">Periodo (YYYY-MM)</label>
-			<input name="period" class="form-control" placeholder="2025-11" required>
+			<label class="form-label">Periodo</label>
+			<input type="hidden" name="period" id="periodValue" value="{{ old('period', date('Y-m')) }}" required>
+			@php
+				$meses = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'];
+				$curPeriod = old('period', date('Y-m'));
+				$curYear = (int) substr($curPeriod, 0, 4);
+				$curMonth = substr($curPeriod, 5, 2);
+			@endphp
+			<div class="d-flex gap-2" style="max-width:280px;">
+				<select id="periodMonth" class="form-select" onchange="syncPeriod()">
+					@foreach($meses as $num => $nombre)
+						<option value="{{ $num }}" @if($curMonth === $num) selected @endif>{{ $nombre }}</option>
+					@endforeach
+				</select>
+				<select id="periodYear" class="form-select" onchange="syncPeriod()">
+					@for($y = $curYear - 2; $y <= $curYear + 2; $y++)
+						<option value="{{ $y }}" @if($y === $curYear) selected @endif>{{ $y }}</option>
+					@endfor
+				</select>
+			</div>
 		</div>
 		<div class="mb-3">
-			<div class="d-flex justify-content-between align-items-center">
+			@php $towerMap = $towers->pluck('name','id'); @endphp
+			<div class="d-flex justify-content-between align-items-center mb-2">
 				<label class="form-label m-0">Apartamentos</label>
-				<div class="text-muted">Seleccionados: <strong id="aptSelectedCount">0</strong></div>
+				<span class="text-muted small">Seleccionados: <strong id="aptSelectedCount">0</strong> / {{ $apartments->count() }}</span>
 			</div>
-			<div class="d-flex gap-2 mb-2">
-				<input type="text" id="aptSearch" class="form-control" placeholder="Buscar por código..." oninput="filterApartmentOptions()">
-				<button type="button" class="btn btn-outline-secondary" onclick="clearApartmentFilter()">Limpiar</button>
+			<div class="d-flex gap-2 align-items-center mb-2 flex-wrap">
+				<div class="input-group input-group-sm" style="max-width:220px;">
+					<span class="input-group-text"><i class="bi bi-search"></i></span>
+					<input type="text" id="aptSearch" class="form-control" placeholder="Buscar código...">
+				</div>
+				<select id="aptTowerFilter" class="form-select form-select-sm" style="max-width:180px;">
+					<option value="">Todas las torres</option>
+					@foreach($towers as $t)
+						<option value="{{ $t->id }}">{{ $t->name }}</option>
+					@endforeach
+				</select>
+				<button type="button" class="btn btn-sm btn-outline-primary" id="btnSelectVisible"><i class="bi bi-check-all"></i> Seleccionar visibles</button>
+				<button type="button" class="btn btn-sm btn-outline-secondary" id="btnClearVisible"><i class="bi bi-x-lg"></i> Limpiar visibles</button>
 			</div>
-			<select name="apartment_ids[]" id="apartmentSelect" class="form-select" multiple onchange="updateAptSelectedCount()">
+			<div id="apartmentsList" class="border rounded p-2 d-flex flex-wrap gap-1" style="max-height:240px; overflow-y:auto;">
 				@foreach($apartments as $ap)
-					<option value="{{$ap->id}}" data-code="{{$ap->code}}">{{$ap->code}}</option>
+					<div class="apartment-row" data-tower-id="{{ $ap->tower_id }}" data-code="{{ strtolower($ap->code) }}" style="width:auto;">
+						<input class="btn-check apt-check" type="checkbox" name="apartment_ids[]" value="{{ $ap->id }}" id="ap{{ $ap->id }}" autocomplete="off">
+						<label class="btn btn-outline-secondary btn-sm py-1 px-2" for="ap{{ $ap->id }}" title="{{ $towerMap[$ap->tower_id] ?? '' }} — {{ number_format($ap->aliquot_percent, 2) }}%">
+							{{ $ap->code }}
+						</label>
+					</div>
 				@endforeach
-			</select>
-			<small class="text-muted">Puedes buscar y seleccionar varios apartamentos. (Requerido solo si agregas ítems)</small>
+			</div>
+			<small class="text-muted">Requerido solo si agregas ítems de gasto</small>
 		</div>
 		<div class="mb-3">
 			<div class="d-flex justify-content-between align-items-center">
@@ -69,10 +106,16 @@
 										<tfoot>
 																	<tr>
 																		<th colspan="5" class="text-end">
-																			Total estimado: <strong id="estimatedTotal">0.00</strong> USD
+																			Total global estimado: <strong id="estimatedTotal">0.00</strong> USD
 																			<span class="ms-3 text-muted">
-																				(Alícuota: <span id="estimatedAliquota">0.00</span> | Igual: <span id="estimatedEqual">0.00</span>)
+																				(Alícuota: <span id="estimatedAliquota">0.00</span> | Igual c/apto: <span id="estimatedEqual">0.00</span>)
 																			</span>
+																		</th>
+																	</tr>
+																	<tr>
+																		<th colspan="5" class="text-end text-muted fw-normal small">
+																			Promedio por apartamento: <strong id="estimatedPerApt">0.00</strong> USD
+																			<span class="ms-2">(sobre <span id="selectedAptCount">0</span> seleccionados)</span>
 																		</th>
 																	</tr>
 										</tfoot>
@@ -103,9 +146,9 @@
 				<input type="number" step="0.01" name="late_fee_value" class="form-control" value="0">
 			</div>
 		</div>
-		<button class="btn btn-primary">Guardar borrador</button>
+		<button class="btn btn-primary btn-action"><i class="bi bi-check-lg"></i> Guardar borrador</button>
+		</div>
 	</form>
-</div>
 
 <!-- Modal: nuevo gasto del catálogo (sin salir de Factura) -->
 <div class="modal fade" id="newExpenseModal" tabindex="-1" aria-hidden="true">
@@ -139,7 +182,21 @@
 
 @push('scripts')
 <script>
+function syncPeriod(){
+	const m = document.getElementById('periodMonth').value;
+	const y = document.getElementById('periodYear').value;
+	document.getElementById('periodValue').value = y + '-' + m;
+}
 const items = new Map();
+function markAddedExpenses(){
+	const select = document.getElementById('expenseSelect');
+	Array.from(select.options).forEach(opt => {
+		if(!opt.value) return;
+		const added = items.has(opt.value);
+		opt.textContent = (added ? '\u2713 ' : '') + opt.dataset.name;
+		opt.style.color = added ? '#6c757d' : '';
+	});
+}
 function addExpenseRow(){
 	const select = document.getElementById('expenseSelect');
 	const id = select.value; if(!id) return;
@@ -173,26 +230,36 @@ function renderItems(){
 		`;
 		tbody.appendChild(tr);
 	}
+	markAddedExpenses();
 	syncPayload();
 }
 function syncPayload(){
 	const arr = Array.from(items.values());
 	document.getElementById('itemsPayload').value = JSON.stringify(arr);
+	const aptCount = document.querySelectorAll('.apt-check:checked').length;
 	// compute estimated total
 	let total = 0;
 	let totalAliquota = 0;
 	let totalEqual = 0;
 	arr.forEach(it => {
-		// estimation assumes equal distribution totals; for aliquota, total es amount*quantity
 		const amt = parseFloat(it.amount || 0);
 		const qty = parseInt(it.quantity || 1);
 		const t = (amt * qty);
-		total += t;
-		if(it.distribution === 'aliquota') totalAliquota += t; else totalEqual += t;
+		if(it.distribution === 'aliquota'){
+			// Alícuota: el monto se reparte entre apartamentos
+			totalAliquota += t;
+			total += t;
+		} else {
+			// Igual: cada apartamento paga el monto completo
+			totalEqual += t;
+			total += t * aptCount;
+		}
 	});
 	document.getElementById('estimatedTotal').innerText = total.toFixed(2);
 	document.getElementById('estimatedAliquota').innerText = totalAliquota.toFixed(2);
-	document.getElementById('estimatedEqual').innerText = totalEqual.toFixed(2);
+	document.getElementById('estimatedEqual').innerText = totalEqual.toFixed(2) + (aptCount > 0 ? ' x' + aptCount + ' = ' + (totalEqual * aptCount).toFixed(2) : '');
+	document.getElementById('selectedAptCount').innerText = aptCount;
+	document.getElementById('estimatedPerApt').innerText = aptCount > 0 ? (total / aptCount).toFixed(2) : '0.00';
 }
 
 function filterExpenseOptions(){
@@ -204,30 +271,49 @@ function filterExpenseOptions(){
 		opt.hidden = term && !name.includes(term);
 	});
 }
-// Apartments search & counter
-function filterApartmentOptions(){
-	const term = (document.getElementById('aptSearch').value || '').toLowerCase();
-	const select = document.getElementById('apartmentSelect');
-	Array.from(select.options).forEach(opt => {
-		const code = (opt.dataset.code || '').toLowerCase();
-		opt.hidden = term && !code.includes(term);
+// Apartments: checkbox filter, search, select/clear
+(function(){
+	const searchInput = document.getElementById('aptSearch');
+	const towerFilter = document.getElementById('aptTowerFilter');
+	const rows = document.querySelectorAll('.apartment-row');
+	const countEl = document.getElementById('aptSelectedCount');
+
+	function filterRows(){
+		const term = (searchInput.value || '').toLowerCase();
+		const tower = towerFilter.value;
+		rows.forEach(row => {
+			const matchCode = !term || row.dataset.code.includes(term);
+			const matchTower = !tower || row.dataset.towerId === tower;
+			row.style.display = (matchCode && matchTower) ? '' : 'none';
+		});
+	}
+	function updateCount(){
+		const checked = document.querySelectorAll('.apt-check:checked').length;
+		countEl.textContent = checked;
+		syncPayload(); // recalculate per-apartment estimate
+	}
+	searchInput.addEventListener('input', filterRows);
+	towerFilter.addEventListener('change', filterRows);
+	document.getElementById('btnSelectVisible').addEventListener('click', () => {
+		rows.forEach(row => {
+			if(row.style.display !== 'none'){
+				row.querySelector('.apt-check').checked = true;
+			}
+		});
+		updateCount();
 	});
-}
-function clearApartmentFilter(){
-	document.getElementById('aptSearch').value = '';
-	filterApartmentOptions();
-}
-function updateAptSelectedCount(){
-	const select = document.getElementById('apartmentSelect');
-	const count = Array.from(select.selectedOptions).length;
-	document.getElementById('aptSelectedCount').innerText = count;
-}
-// initialize count on load
-document.addEventListener('DOMContentLoaded', () => {
-	updateAptSelectedCount();
-	// ensure payload always exists even if no rows
+	document.getElementById('btnClearVisible').addEventListener('click', () => {
+		rows.forEach(row => {
+			if(row.style.display !== 'none'){
+				row.querySelector('.apt-check').checked = false;
+			}
+		});
+		updateCount();
+	});
+	document.querySelectorAll('.apt-check').forEach(cb => cb.addEventListener('change', updateCount));
+	updateCount();
 	syncPayload();
-});
+})();
 
 let newExpenseModalInstance = null;
 function openNewExpenseModal(){

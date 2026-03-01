@@ -1,9 +1,11 @@
 @extends('layouts.app')
 @section('content')
+<div class="d-flex justify-content-between align-items-center page-header">
+	<h1><i class="bi bi-pencil-square me-2"></i>Editar Usuario</h1>
+	<a class="btn btn-outline-secondary btn-action" href="{{ route('users.index') }}"><i class="bi bi-arrow-left"></i> Volver</a>
+</div>
 <div class="card">
 	<div class="card-body">
-		<h3 class="card-title mb-4">Editar Usuario</h3>
-
 		@if($errors->any())
 			<div class="alert alert-danger">{{ $errors->first() }}</div>
 		@endif
@@ -72,8 +74,8 @@
 			@endif
 
 			<div class="d-flex gap-2">
-				<button class="btn btn-primary">Actualizar</button>
-				<a href="{{ route('users.index') }}" class="btn btn-secondary">Cancelar</a>
+				<button class="btn btn-primary btn-action"><i class="bi bi-check-lg"></i> Actualizar</button>
+				<a href="{{ route('users.index') }}" class="btn btn-outline-secondary btn-action"><i class="bi bi-x-lg"></i> Cancelar</a>
 			</div>
 		</form>
 	</div>

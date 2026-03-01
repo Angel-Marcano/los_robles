@@ -1,9 +1,9 @@
 @extends('layouts.app')
 
 @section('content')
-	<div class="d-flex align-items-center justify-content-between mb-3">
-		<h1 class="h4 mb-0">Registrar abono — Factura #{{ $invoice->id }}</h1>
-		<a href="{{ route('invoices.show', $invoice) }}" class="btn btn-outline-secondary btn-sm">Volver</a>
+	<div class="d-flex align-items-center justify-content-between page-header">
+		<h1><i class="bi bi-cash-stack me-2"></i>Registrar abono — Factura #{{ $invoice->id }}</h1>
+		<a href="{{ route('invoices.show', $invoice) }}" class="btn btn-outline-secondary btn-action"><i class="bi bi-arrow-left"></i> Volver</a>
 	</div>
 
 	<div class="alert alert-info">
@@ -89,7 +89,7 @@
 				</div>
 
 				<div class="mt-3">
-					<button class="btn btn-primary">Enviar</button>
+					<button class="btn btn-primary btn-action"><i class="bi bi-send"></i> Enviar</button>
 				</div>
 			</form>
 		</div>

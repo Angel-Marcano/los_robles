@@ -1,7 +1,9 @@
 @extends('layouts.app')
 @section('content')
-<div class="container py-3">
-  <h2 class="h4 mb-3">Editar Factura #{{ $invoice->id }}</h2>
+  <div class="d-flex justify-content-between align-items-center page-header">
+    <h1><i class="bi bi-pencil-square me-2"></i>Editar Factura #{{ $invoice->id }}</h1>
+    <a class="btn btn-outline-secondary btn-action" href="{{ route('invoices.show',$invoice) }}"><i class="bi bi-arrow-left"></i> Volver</a>
+  </div>
   @if($invoice->status!=='draft')
     <div class="alert alert-warning">Solo se puede editar cuando la factura está en borrador.</div>
   @endif
@@ -18,8 +20,26 @@
 
     <div class="row g-3">
       <div class="col-md-3">
-        <label class="form-label">Periodo (YYYY-MM)</label>
-        <input type="text" name="period" class="form-control" value="{{ old('period', $invoice->period) }}" required>
+        <label class="form-label">Periodo</label>
+        <input type="hidden" name="period" id="periodValue" value="{{ old('period', $invoice->period) }}" required>
+        @php
+          $meses = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'];
+          $curPeriod = old('period', $invoice->period);
+          $curYear = (int) substr($curPeriod, 0, 4);
+          $curMonth = substr($curPeriod, 5, 2);
+        @endphp
+        <div class="d-flex gap-2">
+          <select id="periodMonth" class="form-select" onchange="syncPeriod()">
+            @foreach($meses as $num => $nombre)
+              <option value="{{ $num }}" @if($curMonth === $num) selected @endif>{{ $nombre }}</option>
+            @endforeach
+          </select>
+          <select id="periodYear" class="form-select" onchange="syncPeriod()">
+            @for($y = $curYear - 2; $y <= $curYear + 2; $y++)
+              <option value="{{ $y }}" @if($y === $curYear) selected @endif>{{ $y }}</option>
+            @endfor
+          </select>
+        </div>
       </div>
       <div class="col-md-3">
         <label class="form-label">Torre</label>
@@ -73,11 +93,11 @@
           <button type="button" class="btn btn-sm btn-outline-primary" id="apt-global-select-visible">Seleccionar visibles</button>
           <button type="button" class="btn btn-sm btn-outline-secondary" id="apt-global-clear-visible">Limpiar visibles</button>
         </div>
-        <div id="global-apartments-list" class="border rounded p-2" style="max-height:260px; overflow:auto">
+        <div id="global-apartments-list" class="border rounded p-2 d-flex flex-wrap gap-1" style="max-height:260px; overflow:auto">
           @foreach($apartments as $ap)
-            <div class="form-check apartment-row" data-tower-id="{{ $ap->tower_id }}" data-tower-name="{{ $towerMap[$ap->tower_id] ?? '' }}" data-code="{{ \Illuminate\Support\Str::lower($ap->code) }}">
-              <input class="form-check-input" type="checkbox" name="apartment_ids[]" value="{{ $ap->id }}" id="ap{{ $ap->id }}" @if(collect($selectedApartmentIds??[])->contains($ap->id)) checked @endif>
-              <label class="form-check-label" for="ap{{ $ap->id }}">{{ $ap->code }} — {{ $ap->aliquot_percent }}% <span class="text-muted">(Torre: {{ $towerMap[$ap->tower_id] ?? '-' }})</span></label>
+            <div class="apartment-row" data-tower-id="{{ $ap->tower_id }}" data-tower-name="{{ $towerMap[$ap->tower_id] ?? '' }}" data-code="{{ \Illuminate\Support\Str::lower($ap->code) }}" style="width:auto;">
+              <input class="btn-check" type="checkbox" name="apartment_ids[]" value="{{ $ap->id }}" id="ap{{ $ap->id }}" @if(collect($selectedApartmentIds??[])->contains($ap->id)) checked @endif autocomplete="off">
+              <label class="btn btn-outline-secondary btn-sm py-1 px-2" for="ap{{ $ap->id }}" title="{{ $towerMap[$ap->tower_id] ?? '-' }} — {{ $ap->aliquot_percent }}%">{{ $ap->code }}</label>
             </div>
           @endforeach
         </div>
@@ -131,15 +151,19 @@
 
     <input type="hidden" name="items_payload" id="items_payload">
     <div class="mt-3 d-flex justify-content-end gap-2">
-      <a class="btn btn-outline-secondary" href="{{ route('invoices.show',$invoice) }}">Cancelar</a>
-      <button type="submit" class="btn btn-primary" onclick="return beforeSubmit()">Guardar cambios</button>
+      <a class="btn btn-outline-secondary btn-action" href="{{ route('invoices.show',$invoice) }}"><i class="bi bi-x-lg"></i> Cancelar</a>
+      <button type="submit" class="btn btn-primary btn-action" onclick="return beforeSubmit()"><i class="bi bi-check-lg"></i> Guardar cambios</button>
     </div>
   </form>
-</div>
 @endsection
 
 @push('scripts')
 <script>
+function syncPeriod(){
+  const m = document.getElementById('periodMonth').value;
+  const y = document.getElementById('periodYear').value;
+  document.getElementById('periodValue').value = y + '-' + m;
+}
 const items = [];
 
 function escapeHtml(str){
