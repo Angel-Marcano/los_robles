@@ -309,7 +309,7 @@ class InvoiceController extends Controller {
         $apartments = $apartmentsQuery->orderBy('code')->get();
         $items = ExpenseItem::where('active',true)->orderBy('name')->get();
         // Prefill: aggregate current invoice items by expense_item_id
-        $existing = $invoice->items()->with('expenseItem')->get(['expense_item_id','apartment_id','subtotal_usd','distributed','quantity']);
+        $existing = $invoice->items()->with('expenseItem')->get(['expense_item_id','apartment_id','base_amount_usd','subtotal_usd','distributed','quantity']);
         $selectedApartmentIds = $existing->pluck('apartment_id')->unique()->values();
         $grouped = [];
         foreach($existing as $row){
@@ -319,26 +319,20 @@ class InvoiceController extends Controller {
                     'expense_item_id'=>$eid,
                     'name'=> optional($row->expenseItem)->name ?? ('Item '.$eid),
                     'type'=> optional($row->expenseItem)->type ?? '-',
-                    'amount'=>0.0,
+                    'amount'=>(float)($row->base_amount_usd ?? 0),
                     'quantity'=> (int) ($row->quantity ?? 1),
                     'distribution'=> $row->distributed ? 'aliquota' : 'equal',
                     'apartment_ids'=> [],
                 ];
             }
-            $grouped[$eid]['amount'] += (float)$row->subtotal_usd; // sum subtotals
             $grouped[$eid]['apartment_ids'][] = (int) $row->apartment_id;
             // ensure quantity is consistent (first non-null wins)
             if(empty($grouped[$eid]['quantity'])){ $grouped[$eid]['quantity'] = (int) ($row->quantity ?? 1); }
         }
-        // Convert summed subtotal to original amount by dividing by quantity when possible
+        // Keep original entered amount from base_amount_usd to avoid round-trip drift
         $prefill = [];
         foreach($grouped as $g){
-            $qty = max(1, (int) ($g['quantity'] ?? 1));
-            $aptCount = max(1, count($g['apartment_ids'] ?? []));
-            $amount = $g['amount'];
-            $divisor = (($g['distribution'] ?? 'aliquota') === 'equal') ? ($qty * $aptCount) : $qty;
-            $perUnit = $divisor > 0 ? round(((float)$amount) / $divisor, 2) : (float)$amount;
-            $g['amount'] = $perUnit;
+            $g['amount'] = round((float)($g['amount'] ?? 0), 2);
             $g['apartment_ids'] = collect($g['apartment_ids'] ?? [])->filter()->unique()->values()->all();
             $prefill[] = $g;
         }
