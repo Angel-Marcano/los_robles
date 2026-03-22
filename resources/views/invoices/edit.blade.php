@@ -17,6 +17,7 @@
 
   <form method="POST" action="{{ route('invoices.update',$invoice) }}" id="invoice-edit-form">
     @csrf @method('PATCH')
+    @php($currentRate = (float)($activeRate->rate ?? $invoice->exchange_rate_used ?? 0))
 
     <div class="row g-3">
       <div class="col-md-3">
@@ -104,6 +105,7 @@
       </div>
       <div class="col-md-6">
         <label class="form-label">Gastos del catálogo</label>
+        <div class="small text-muted mb-2">Tasa activa: <strong id="rateLabel">{{ number_format($currentRate, 2) }}</strong> VES/USD</div>
         <div class="d-flex justify-content-end mb-2">
           <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openNewExpenseModal()">Nuevo gasto</button>
         </div>
@@ -137,6 +139,7 @@
               <tr>
                 <th>Gasto</th>
                 <th style="width:120px">Monto USD</th>
+                <th style="width:120px">Monto VES</th>
                 <th style="width:100px">Cantidad</th>
                 <th style="width:140px">Distribución</th>
                 <th style="width:100px">Aptos</th>
@@ -164,6 +167,7 @@ function syncPeriod(){
   const y = document.getElementById('periodYear').value;
   document.getElementById('periodValue').value = y + '-' + m;
 }
+const activeRate = {{ $currentRate > 0 ? $currentRate : 0 }};
 const items = [];
 
 function escapeHtml(str){
@@ -207,7 +211,7 @@ function wireCatalogButtons(){
 function addItem(id, name){
   const exists = items.find(i => i.expense_item_id === id);
   if(exists){ alert('Ya agregado'); return; }
-  items.push({expense_item_id:id, name:name, amount:0, quantity:1, distribution:'aliquota', apartment_ids: []});
+  items.push({expense_item_id:id, name:name, amount:0, amount_ves:0, quantity:1, distribution:'aliquota', apartment_ids: []});
   renderItems();
 }
 function removeItem(id){
@@ -223,6 +227,7 @@ function renderItems(){
     tr.innerHTML = `
       <td>${escapeHtml(i.name)}</td>
       <td><input type="number" step="0.01" class="form-control form-control-sm" value="${i.amount}" data-idx="${idx}" data-field="amount"></td>
+      <td><input type="number" step="0.01" class="form-control form-control-sm" value="${(i.amount_ves ?? ((i.amount||0)*activeRate)).toFixed(2)}" data-idx="${idx}" data-field="amount_ves"></td>
       <td><input type="number" step="1" min="1" class="form-control form-control-sm" value="${i.quantity}" data-idx="${idx}" data-field="quantity"></td>
       <td>
         <select class="form-select form-select-sm" data-idx="${idx}" data-field="distribution">
@@ -237,8 +242,21 @@ function renderItems(){
   });
   // bind events
   tbody.querySelectorAll('input[data-field=amount]').forEach(el=>{
-    el.addEventListener('input', (e)=>{
-      const idx = parseInt(e.target.getAttribute('data-idx')); items[idx].amount = parseFloat(e.target.value||0);
+    el.addEventListener('change', (e)=>{
+      const idx = parseInt(e.target.getAttribute('data-idx'));
+      const usd = parseFloat(e.target.value||0);
+      items[idx].amount = usd;
+      items[idx].amount_ves = activeRate > 0 ? (usd * activeRate) : 0;
+      renderItems();
+    });
+  });
+  tbody.querySelectorAll('input[data-field=amount_ves]').forEach(el=>{
+    el.addEventListener('change', (e)=>{
+      const idx = parseInt(e.target.getAttribute('data-idx'));
+      const ves = parseFloat(e.target.value||0);
+      items[idx].amount_ves = ves;
+      items[idx].amount = activeRate > 0 ? (ves / activeRate) : 0;
+      renderItems();
     });
   });
   tbody.querySelectorAll('input[data-field=quantity]').forEach(el=>{
@@ -266,7 +284,14 @@ function renderItems(){
   updateCatalogButtons();
 }
 function beforeSubmit(){
-  document.getElementById('items_payload').value = JSON.stringify(items);
+  const payload = items.map(i => ({
+    expense_item_id: i.expense_item_id,
+    amount: parseFloat(i.amount || 0),
+    quantity: parseInt(i.quantity || 1),
+    distribution: i.distribution || 'aliquota',
+    apartment_ids: Array.isArray(i.apartment_ids) ? i.apartment_ids : [],
+  }));
+  document.getElementById('items_payload').value = JSON.stringify(payload);
   return true;
 }
 // Prefill from server
@@ -281,6 +306,7 @@ const prefill = @json($prefill);
     expense_item_id: p.expense_item_id,
     name: p.name || ('Item ' + p.expense_item_id),
     amount: parseFloat(p.amount || 0),
+    amount_ves: activeRate > 0 ? (parseFloat(p.amount || 0) * activeRate) : 0,
     quantity: parseInt(p.quantity || 1),
     distribution: p.distribution || 'aliquota',
     apartment_ids: aptIds,

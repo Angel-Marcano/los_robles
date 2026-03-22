@@ -5,6 +5,7 @@ use Dompdf\Dompdf;
 use Dompdf\Options; 
 use Illuminate\Http\Request; 
 use App\Services\BillingService;
+use Illuminate\Support\Facades\File;
 
 class InvoiceController extends Controller {
     public function index(Request $request){
@@ -53,6 +54,8 @@ class InvoiceController extends Controller {
     }
     public function pdf(Invoice $invoice){ 
         $this->authorize('view',$invoice); 
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(120);
         // Eager load to avoid lazy-loading issues and N+1 in view
         $invoice->load(['items.apartment','items.expenseItem','tower','apartment','paymentReports']);
         // Filter items for residents: show only their apartment charges
@@ -71,15 +74,33 @@ class InvoiceController extends Controller {
             'items'=>$items,
             'viewerTotals'=>[ 'usd'=>$myTotalUsd, 'ves'=>$myTotalVes, 'isAdmin'=>$isAdmin ],
         ])->render(); 
+        $dompdfTempDir = storage_path('app/dompdf/temp');
+        $dompdfFontCacheDir = storage_path('app/dompdf/font-cache');
+        if(!File::exists($dompdfTempDir)){ File::makeDirectory($dompdfTempDir, 0775, true); }
+        if(!File::exists($dompdfFontCacheDir)){ File::makeDirectory($dompdfFontCacheDir, 0775, true); }
         $options = new Options();
         $options->set('defaultFont','DejaVu Sans');
         $options->set('isHtml5ParserEnabled', true);
         $options->set('isRemoteEnabled', false); // inline CSS only
-        $dompdf=new Dompdf($options); 
-        $dompdf->loadHtml($html);
-        $dompdf->setPaper('letter','portrait');
-        $dompdf->render(); 
-        return response($dompdf->output(),200,['Content-Type'=>'application/pdf']); 
+        $options->set('isFontSubsettingEnabled', true);
+        $options->set('dpi', 96);
+        $options->set('tempDir', $dompdfTempDir);
+        $options->set('fontCache', $dompdfFontCacheDir);
+        $options->set('chroot', base_path());
+        try {
+            $dompdf=new Dompdf($options); 
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('letter','portrait');
+            $dompdf->render(); 
+            return response($dompdf->output(),200,['Content-Type'=>'application/pdf']); 
+        } catch (\Throwable $e) {
+            Log::error('PDF generation failed', [
+                'invoice_id' => $invoice->id,
+                'user_id' => auth()->id(),
+                'message' => $e->getMessage(),
+            ]);
+            return back()->withErrors(['pdf' => 'No se pudo generar el PDF. Revisa permisos de storage y extensiones PHP del servidor.']);
+        }
     }
     public function markPaid(Invoice $invoice, Request $request){ 
         $this->authorize('markPaid',$invoice); 
@@ -267,6 +288,7 @@ class InvoiceController extends Controller {
     public function create(Request $r){
         $this->authorize('create',Invoice::class);
         $towers = Tower::orderBy('name')->get();
+        $activeRate = CurrencyRate::where('active',true)->orderByDesc('valid_from')->first();
         $selectedTower = null;
         if($r->filled('tower_id')){ $selectedTower = Tower::find($r->tower_id); }
         // Apartamentos según torre seleccionada (o todos)
@@ -274,13 +296,14 @@ class InvoiceController extends Controller {
         if($selectedTower){ $apartmentsQuery->where('tower_id',$selectedTower->id); }
         $apartments = $apartmentsQuery->orderBy('code')->get();
         $items = ExpenseItem::where('active',true)->orderBy('name')->get();
-        return view('invoices.create',compact('selectedTower','towers','apartments','items')); 
+        return view('invoices.create',compact('selectedTower','towers','apartments','items','activeRate')); 
     }
     public function edit(Invoice $invoice, Request $r){
         $this->authorize('update',$invoice);
         if($invoice->status!=='draft'){ return redirect()->route('invoices.show',$invoice)->with('status','Solo se puede editar en borrador'); }
         $towers = Tower::orderBy('name')->get();
         $selectedTower = $invoice->tower_id ? Tower::find($invoice->tower_id) : null;
+        $activeRate = CurrencyRate::where('active',true)->orderByDesc('valid_from')->first();
         $apartmentsQuery = Apartment::query();
         if($selectedTower){ $apartmentsQuery->where('tower_id',$selectedTower->id); }
         $apartments = $apartmentsQuery->orderBy('code')->get();
@@ -311,13 +334,15 @@ class InvoiceController extends Controller {
         $prefill = [];
         foreach($grouped as $g){
             $qty = max(1, (int) ($g['quantity'] ?? 1));
+            $aptCount = max(1, count($g['apartment_ids'] ?? []));
             $amount = $g['amount'];
-            $perUnit = $qty > 0 ? round(((float)$amount) / $qty, 2) : (float)$amount;
+            $divisor = (($g['distribution'] ?? 'aliquota') === 'equal') ? ($qty * $aptCount) : $qty;
+            $perUnit = $divisor > 0 ? round(((float)$amount) / $divisor, 2) : (float)$amount;
             $g['amount'] = $perUnit;
             $g['apartment_ids'] = collect($g['apartment_ids'] ?? [])->filter()->unique()->values()->all();
             $prefill[] = $g;
         }
-        return view('invoices.edit',compact('invoice','selectedTower','towers','apartments','items','prefill','selectedApartmentIds'));
+        return view('invoices.edit',compact('invoice','selectedTower','towers','apartments','items','prefill','selectedApartmentIds','activeRate'));
     }
     public function store(Request $r, BillingService $billing){
         $this->authorize('store',Invoice::class);
@@ -436,8 +461,7 @@ class InvoiceController extends Controller {
                     ]);
                 }
             } else {
-                $count = max(1, $apartmentsForItem->count());
-                $portionEach = $count > 0 ? round(($totalAmount * $quantity) / $count, 2) : 0;
+                $portionEach = round($totalAmount * $quantity, 2);
                 foreach($apartmentsForItem as $ap){
                     $totalUsd += $portionEach;
                     \App\Models\InvoiceItem::create([

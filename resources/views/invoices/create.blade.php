@@ -20,6 +20,7 @@
 	<form method="POST" action="{{route('invoices.store')}}" class="card">
 		<div class="card-body">
 		@csrf
+		@php($currentRate = (float)($activeRate->rate ?? 0))
 		@if($selectedTower)<input type="hidden" name="tower_id" value="{{$selectedTower->id}}">@endif
 		<div class="mb-3">
 			<label class="form-label">Periodo</label>
@@ -78,6 +79,7 @@
 		<div class="mb-3">
 			<div class="d-flex justify-content-between align-items-center">
 				<label class="form-label m-0">Agregar gastos a esta factura</label>
+				<span class="text-muted small">Tasa activa: <strong id="rateLabel">{{ number_format($currentRate, 2) }}</strong> VES/USD</span>
 				<div class="d-flex gap-2">
 					<input type="text" id="expenseSearch" class="form-control" placeholder="Buscar gasto..." oninput="filterExpenseOptions()">
 					<select id="expenseSelect" class="form-select">
@@ -97,6 +99,7 @@
 						<tr>
 							<th>Gasto</th>
 							<th>Monto USD</th>
+							<th>Monto VES</th>
 							<th>Cantidad</th>
 							<th>Distribución</th>
 							<th></th>
@@ -187,6 +190,7 @@ function syncPeriod(){
 	const y = document.getElementById('periodYear').value;
 	document.getElementById('periodValue').value = y + '-' + m;
 }
+const activeRate = {{ $currentRate > 0 ? $currentRate : 0 }};
 const items = new Map();
 function markAddedExpenses(){
 	const select = document.getElementById('expenseSelect');
@@ -202,13 +206,29 @@ function addExpenseRow(){
 	const id = select.value; if(!id) return;
 	const name = select.selectedOptions[0].dataset.name;
 	if(items.has(id)) { alert('Este gasto ya fue agregado.'); return; }
-	items.set(id, { expense_item_id: id, amount: 0, quantity: 1, distribution: 'aliquota' });
+	items.set(id, { expense_item_id: id, amount: 0, amount_ves: 0, quantity: 1, distribution: 'aliquota' });
 	renderItems();
 }
 function removeExpenseRow(id){ items.delete(String(id)); renderItems(); }
 function updateField(id, field, value){
 	const it = items.get(String(id)); if(!it) return;
-	if(field === 'amount' || field === 'quantity'){ value = parseFloat(value || 0); }
+	if(field === 'amount'){
+		value = parseFloat(value || 0);
+		it.amount = value;
+		it.amount_ves = activeRate > 0 ? (value * activeRate) : 0;
+		items.set(String(id), it);
+		renderItems();
+		return;
+	}
+	if(field === 'amount_ves'){
+		value = parseFloat(value || 0);
+		it.amount_ves = value;
+		it.amount = activeRate > 0 ? (value / activeRate) : 0;
+		items.set(String(id), it);
+		renderItems();
+		return;
+	}
+	if(field === 'quantity'){ value = parseFloat(value || 0); }
 	it[field] = value; items.set(String(id), it); syncPayload();
 }
 function renderItems(){
@@ -219,6 +239,7 @@ function renderItems(){
 		tr.innerHTML = `
 			<td>${document.querySelector(`#expenseSelect option[value='${id}']`).dataset.name}</td>
 			<td><input type="number" step="0.01" class="form-control form-control-sm" value="${it.amount}" onchange="updateField('${id}','amount',this.value)"></td>
+			<td><input type="number" step="0.01" class="form-control form-control-sm" value="${(it.amount_ves ?? ((it.amount||0)*activeRate)).toFixed(2)}" onchange="updateField('${id}','amount_ves',this.value)"></td>
 			<td><input type="number" step="1" class="form-control form-control-sm" value="${it.quantity}" onchange="updateField('${id}','quantity',this.value)"></td>
 			<td>
 				<select class="form-select form-select-sm" onchange="updateField('${id}','distribution',this.value)">
@@ -234,7 +255,12 @@ function renderItems(){
 	syncPayload();
 }
 function syncPayload(){
-	const arr = Array.from(items.values());
+	const arr = Array.from(items.values()).map(i => ({
+		expense_item_id: i.expense_item_id,
+		amount: parseFloat(i.amount || 0),
+		quantity: parseInt(i.quantity || 1),
+		distribution: i.distribution || 'aliquota',
+	}));
 	document.getElementById('itemsPayload').value = JSON.stringify(arr);
 	const aptCount = document.querySelectorAll('.apt-check:checked').length;
 	// compute estimated total
