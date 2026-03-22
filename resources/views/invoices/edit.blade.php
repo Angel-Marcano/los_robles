@@ -160,6 +160,11 @@ function syncPeriod(){
 }
 const activeRate = {{ (float)((isset($activeRate) && $activeRate) ? $activeRate->rate : ($invoice->exchange_rate_used ?? 0)) > 0 ? (float)((isset($activeRate) && $activeRate) ? $activeRate->rate : ($invoice->exchange_rate_used ?? 0)) : 0 }};
 const items = [];
+function parseDecimalValue(value){
+  const normalized = String(value ?? '').replace(',', '.').trim();
+  const num = parseFloat(normalized);
+  return Number.isFinite(num) ? num : 0;
+}
 
 function escapeHtml(str){
   return String(str ?? '')
@@ -233,26 +238,32 @@ function renderItems(){
   });
   // bind events
   tbody.querySelectorAll('input[data-field=amount]').forEach(el=>{
-    el.addEventListener('change', (e)=>{
+    el.addEventListener('input', (e)=>{
       const idx = parseInt(e.target.getAttribute('data-idx'));
-      const usd = parseFloat(e.target.value||0);
+      const usd = parseDecimalValue(e.target.value);
       items[idx].amount = usd;
       items[idx].amount_ves = activeRate > 0 ? (usd * activeRate) : 0;
-      renderItems();
+      const amountVesInput = tbody.querySelector(`input[data-field="amount_ves"][data-idx="${idx}"]`);
+      if(amountVesInput){
+        amountVesInput.value = Number(items[idx].amount_ves || 0).toFixed(2);
+      }
     });
   });
   tbody.querySelectorAll('input[data-field=amount_ves]').forEach(el=>{
-    el.addEventListener('change', (e)=>{
+    el.addEventListener('input', (e)=>{
       const idx = parseInt(e.target.getAttribute('data-idx'));
-      const ves = parseFloat(e.target.value||0);
+      const ves = parseDecimalValue(e.target.value);
       items[idx].amount_ves = ves;
       items[idx].amount = activeRate > 0 ? (ves / activeRate) : 0;
-      renderItems();
+      const amountInput = tbody.querySelector(`input[data-field="amount"][data-idx="${idx}"]`);
+      if(amountInput){
+        amountInput.value = Number(items[idx].amount || 0).toFixed(2);
+      }
     });
   });
   tbody.querySelectorAll('input[data-field=quantity]').forEach(el=>{
     el.addEventListener('input', (e)=>{
-      const idx = parseInt(e.target.getAttribute('data-idx')); items[idx].quantity = Math.max(1, parseInt(e.target.value||1));
+      const idx = parseInt(e.target.getAttribute('data-idx')); items[idx].quantity = Math.max(1, parseInt(e.target.value || 1, 10) || 1);
     });
   });
   tbody.querySelectorAll('select[data-field=distribution]').forEach(el=>{
@@ -277,8 +288,8 @@ function renderItems(){
 function beforeSubmit(){
   const payload = items.map(i => ({
     expense_item_id: i.expense_item_id,
-    amount: parseFloat(i.amount || 0),
-    quantity: parseInt(i.quantity || 1),
+    amount: parseDecimalValue(i.amount || 0),
+    quantity: Math.max(1, parseInt(i.quantity || 1, 10) || 1),
     distribution: i.distribution || 'aliquota',
     apartment_ids: Array.isArray(i.apartment_ids) ? i.apartment_ids : [],
   }));
@@ -292,13 +303,14 @@ const prefill = @json($prefill);
   const aptIds = (Array.isArray(p.apartment_ids)
     ? [...p.apartment_ids] // CLONE para evitar compartir referencia entre ítems
     : []);
+  const prefillAmount = parseDecimalValue(p.amount || 0);
 
   items.push({
     expense_item_id: p.expense_item_id,
     name: p.name || ('Item ' + p.expense_item_id),
-    amount: parseFloat(p.amount || 0),
-    amount_ves: activeRate > 0 ? (parseFloat(p.amount || 0) * activeRate) : 0,
-    quantity: parseInt(p.quantity || 1),
+    amount: prefillAmount,
+    amount_ves: activeRate > 0 ? (prefillAmount * activeRate) : 0,
+    quantity: Math.max(1, parseInt(p.quantity || 1, 10) || 1),
     distribution: p.distribution || 'aliquota',
     apartment_ids: aptIds,
   });
