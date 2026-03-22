@@ -65,15 +65,12 @@
       <div class="col-md-3">
         <label class="form-label">Mora valor</label>
         <input type="number" step="0.01" name="late_fee_value" class="form-control" value="{{ old('late_fee_value',$invoice->late_fee_value) }}">
-      </div>
     </div>
 
     <hr class="my-3">
-
     <div class="row g-3">
       <div class="col-md-6">
         <label class="form-label">Apartamentos</label>
-        @php $towerMap = $towers->pluck('name','id'); @endphp
         <div class="d-flex gap-2 align-items-center mb-2">
           <div class="input-group input-group-sm" style="max-width: 260px;">
             <span class="input-group-text">Buscar</span>
@@ -90,9 +87,9 @@
         </div>
         <div id="global-apartments-list" class="border rounded p-2 d-flex flex-wrap gap-1" style="max-height:260px; overflow:auto">
           @foreach($apartments as $ap)
-            <div class="apartment-row" data-tower-id="{{ $ap->tower_id }}" data-tower-name="{{ $towerMap[$ap->tower_id] ?? '' }}" data-code="{{ \Illuminate\Support\Str::lower($ap->code) }}" style="width:auto;">
+            <div class="apartment-row" data-tower-id="{{ $ap->tower_id }}" data-tower-name="{{ optional($towers->firstWhere('id', $ap->tower_id))->name ?? '' }}" data-code="{{ \Illuminate\Support\Str::lower($ap->code) }}" style="width:auto;">
               <input class="btn-check" type="checkbox" name="apartment_ids[]" value="{{ $ap->id }}" id="ap{{ $ap->id }}" @if(collect($selectedApartmentIds??[])->contains($ap->id)) checked @endif autocomplete="off">
-              <label class="btn btn-outline-secondary btn-sm py-1 px-2" for="ap{{ $ap->id }}" title="{{ $towerMap[$ap->tower_id] ?? '-' }} — {{ $ap->aliquot_percent }}%">{{ $ap->code }}</label>
+              <label class="btn btn-outline-secondary btn-sm py-1 px-2" for="ap{{ $ap->id }}" title="{{ optional($towers->firstWhere('id', $ap->tower_id))->name ?? '-' }} — {{ $ap->aliquot_percent }}%">{{ $ap->code }}</label>
             </div>
           @endforeach
         </div>
@@ -322,7 +319,7 @@ filterInput?.addEventListener('input', (e)=>{
 
 // Modal de selección de apartamentos por ítem
 let currentIdx = null;
-@php($aptosForJson = $apartments->map(function($ap) use ($towerMap) { return ['id'=>$ap->id,'code'=>$ap->code,'aliquot'=>$ap->aliquot_percent,'tower_id'=>$ap->tower_id,'tower_name'=>$towerMap[$ap->tower_id]??'']; })->values())
+@php($aptosForJson = $apartments->map(function($ap) use ($towers) { return ['id'=>$ap->id,'code'=>$ap->code,'aliquot'=>$ap->aliquot_percent,'tower_id'=>$ap->tower_id,'tower_name'=>optional($towers->firstWhere('id', $ap->tower_id))->name ?? '']; })->values())
 const allAptos = @json($aptosForJson);
 function renderModalAptosList(){
   const list = document.getElementById('aptos-list');
