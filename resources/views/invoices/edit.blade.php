@@ -23,20 +23,16 @@
       <div class="col-md-3">
         <label class="form-label">Periodo</label>
         <input type="hidden" name="period" id="periodValue" value="{{ old('period', $invoice->period) }}" required>
-        @php
-          $curPeriod = old('period', $invoice->period);
-          $curYear = (int) substr($curPeriod, 0, 4);
-          $curMonth = substr($curPeriod, 5, 2);
-        @endphp
         <div class="d-flex gap-2">
           <select id="periodMonth" class="form-select" onchange="syncPeriod()">
             @foreach(['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'] as $num => $nombre)
-              <option value="{{ $num }}" @if($curMonth === $num) selected @endif>{{ $nombre }}</option>
+              <option value="{{ $num }}" @if(substr((string) old('period', $invoice->period), 5, 2) === $num) selected @endif>{{ $nombre }}</option>
             @endforeach
           </select>
           <select id="periodYear" class="form-select" onchange="syncPeriod()">
-            @for($y = $curYear - 2; $y <= $curYear + 2; $y++)
-              <option value="{{ $y }}" @if($y === $curYear) selected @endif>{{ $y }}</option>
+            @php($selectedYear = (int) substr((string) old('period', $invoice->period), 0, 4))
+            @for($y = $selectedYear - 2; $y <= $selectedYear + 2; $y++)
+              <option value="{{ $y }}" @if($y === $selectedYear) selected @endif>{{ $y }}</option>
             @endfor
           </select>
         </div>
