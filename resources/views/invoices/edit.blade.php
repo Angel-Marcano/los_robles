@@ -24,14 +24,13 @@
         <label class="form-label">Periodo</label>
         <input type="hidden" name="period" id="periodValue" value="{{ old('period', $invoice->period) }}" required>
         @php
-          $meses = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'];
           $curPeriod = old('period', $invoice->period);
           $curYear = (int) substr($curPeriod, 0, 4);
           $curMonth = substr($curPeriod, 5, 2);
         @endphp
         <div class="d-flex gap-2">
           <select id="periodMonth" class="form-select" onchange="syncPeriod()">
-            @foreach($meses as $num => $nombre)
+            @foreach(['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'] as $num => $nombre)
               <option value="{{ $num }}" @if($curMonth === $num) selected @endif>{{ $nombre }}</option>
             @endforeach
           </select>

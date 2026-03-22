@@ -22,7 +22,10 @@
 						<label class="form-label">Contraseña</label>
 						<div class="input-group">
 							<span class="input-group-text"><i class="bi bi-lock"></i></span>
-							<input name="password" type="password" class="form-control" required placeholder="••••••••" />
+							<input id="passwordInput" name="password" type="password" class="form-control" required placeholder="••••••••" />
+							<button type="button" class="btn btn-outline-secondary" id="togglePassword" aria-label="Mostrar contraseña" title="Mostrar contraseña">
+								<i class="bi bi-eye"></i>
+							</button>
 						</div>
 					</div>
 					<button class="btn btn-primary w-100 btn-action mb-3"><i class="bi bi-box-arrow-in-right me-1"></i> Entrar</button>
@@ -35,3 +38,23 @@
 	</div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+	const passwordInput = document.getElementById('passwordInput');
+	const toggleButton = document.getElementById('togglePassword');
+	if(!passwordInput || !toggleButton) return;
+
+	toggleButton.addEventListener('click', function(){
+		const isPassword = passwordInput.type === 'password';
+		passwordInput.type = isPassword ? 'text' : 'password';
+		toggleButton.innerHTML = isPassword
+			? '<i class="bi bi-eye-slash"></i>'
+			: '<i class="bi bi-eye"></i>';
+		toggleButton.setAttribute('aria-label', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
+		toggleButton.setAttribute('title', isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña');
+	});
+});
+</script>
+@endpush
