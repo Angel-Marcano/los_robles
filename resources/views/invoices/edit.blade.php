@@ -17,7 +17,6 @@
 
   <form method="POST" action="{{ route('invoices.update',$invoice) }}" id="invoice-edit-form">
     @csrf @method('PATCH')
-    @php($rateValue = (float)((isset($activeRate) && $activeRate) ? $activeRate->rate : ($invoice->exchange_rate_used ?? 0)))
 
     <div class="row g-3">
       <div class="col-md-3">
@@ -100,7 +99,7 @@
       </div>
       <div class="col-md-6">
         <label class="form-label">Gastos del catálogo</label>
-        <div class="small text-muted mb-2">Tasa activa: <strong id="rateLabel">{{ number_format($rateValue, 2) }}</strong> VES/USD</div>
+        <div class="small text-muted mb-2">Tasa activa: <strong id="rateLabel">{{ number_format((float)((isset($activeRate) && $activeRate) ? $activeRate->rate : ($invoice->exchange_rate_used ?? 0)), 2) }}</strong> VES/USD</div>
         <div class="d-flex justify-content-end mb-2">
           <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openNewExpenseModal()">Nuevo gasto</button>
         </div>
@@ -162,7 +161,7 @@ function syncPeriod(){
   const y = document.getElementById('periodYear').value;
   document.getElementById('periodValue').value = y + '-' + m;
 }
-  const activeRate = {{ $rateValue > 0 ? $rateValue : 0 }};
+const activeRate = {{ (float)((isset($activeRate) && $activeRate) ? $activeRate->rate : ($invoice->exchange_rate_used ?? 0)) > 0 ? (float)((isset($activeRate) && $activeRate) ? $activeRate->rate : ($invoice->exchange_rate_used ?? 0)) : 0 }};
 const items = [];
 
 function escapeHtml(str){
