@@ -17,6 +17,7 @@ class AuthServiceProvider extends ServiceProvider
         \App\Models\PaymentReport::class => \App\Policies\PaymentReportPolicy::class,
         \App\Models\ExpenseItem::class => \App\Policies\ExpenseItemPolicy::class,
     \App\Models\Ownership::class => \App\Policies\OwnershipPolicy::class,
+    \App\Models\ReserveFund::class => \App\Policies\ReserveFundPolicy::class,
     ];
 
     /**

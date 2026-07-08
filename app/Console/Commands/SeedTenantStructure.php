@@ -13,7 +13,7 @@ class SeedTenantStructure extends Command
         {subdomain : Subdominio del condominio}
         {--towers=A,B,C : Lista de torres (ej: A,B,C)}
         {--domain=user.com : Dominio para emails automáticos}
-        {--password=12345678 : Clave para usuarios automáticos}
+        {--password= : Clave para usuarios automáticos (si se omite, se genera una aleatoria)}
         {--dry-run : Solo muestra lo que haría, sin escribir en BD}';
 
     protected $description = 'Carga masiva de torres/apartamentos/usuarios para un tenant.';
@@ -24,6 +24,10 @@ class SeedTenantStructure extends Command
         $towerCsv = (string) $this->option('towers');
         $emailDomain = trim((string) $this->option('domain'));
         $password = (string) $this->option('password');
+        if ($password === '') {
+            $password = \Illuminate\Support\Str::random(16);
+            $this->warn('Contraseña generada para usuarios automáticos: '.$password.' (guárdala; no se volverá a mostrar)');
+        }
         $dryRun = (bool) $this->option('dry-run');
 
         if ($subdomain === '') {

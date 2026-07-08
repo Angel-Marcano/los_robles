@@ -65,6 +65,7 @@
       <div class="col-md-3">
         <label class="form-label">Mora valor</label>
         <input type="number" step="0.01" name="late_fee_value" class="form-control" value="{{ old('late_fee_value',$invoice->late_fee_value) }}">
+      </div>
     </div>
 
     <hr class="my-3">
@@ -289,6 +290,7 @@ function beforeSubmit(){
   const payload = items.map(i => ({
     expense_item_id: i.expense_item_id,
     amount: parseDecimalValue(i.amount || 0),
+    amount_ves: parseDecimalValue(i.amount_ves || 0),
     quantity: Math.max(1, parseInt(i.quantity || 1, 10) || 1),
     distribution: i.distribution || 'aliquota',
     apartment_ids: Array.isArray(i.apartment_ids) ? i.apartment_ids : [],
@@ -304,12 +306,13 @@ const prefill = @json($prefill);
     ? [...p.apartment_ids] // CLONE para evitar compartir referencia entre ítems
     : []);
   const prefillAmount = parseDecimalValue(p.amount || 0);
+  const prefillAmountVes = parseDecimalValue(p.amount_ves || 0);
 
   items.push({
     expense_item_id: p.expense_item_id,
     name: p.name || ('Item ' + p.expense_item_id),
     amount: prefillAmount,
-    amount_ves: activeRate > 0 ? (prefillAmount * activeRate) : 0,
+    amount_ves: prefillAmountVes > 0 ? prefillAmountVes : (activeRate > 0 ? (prefillAmount * activeRate) : 0),
     quantity: Math.max(1, parseInt(p.quantity || 1, 10) || 1),
     distribution: p.distribution || 'aliquota',
     apartment_ids: aptIds,

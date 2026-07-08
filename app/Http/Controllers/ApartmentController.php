@@ -39,22 +39,27 @@ class ApartmentController extends Controller {
             'tower_id' => $tower->id,
         ]);
         // Crear usuario propietario y asignar ownership si se proporcionó email
+        $ownerPasswordNotice = '';
         if (!empty($data['owner_email'])) {
             $user = \App\Models\User::where('email',$data['owner_email'])->first();
             if (!$user) {
+                $ownerPassword = $data['owner_password'] ?: \Illuminate\Support\Str::random(12);
                 $user = \App\Models\User::create([
                     'name' => $data['owner_name'] ?: 'Propietario',
                     'email'=> $data['owner_email'],
-                    'password' => bcrypt($data['owner_password'] ?: '1234'),
+                    'password' => bcrypt($ownerPassword),
                     'active' => true,
                 ]);
+                if (empty($data['owner_password'])) {
+                    $ownerPasswordNotice = ' Contraseña generada para '.$data['owner_email'].': '.$ownerPassword;
+                }
             }
             \App\Models\Ownership::firstOrCreate([
                 'apartment_id' => $apartment->id,
                 'user_id'      => $user->id,
             ]);
         }
-        return redirect()->route('towers.apartments.index',$tower)->with('status','Apartamento creado'); 
+        return redirect()->route('towers.apartments.index',$tower)->with('status','Apartamento creado.'.$ownerPasswordNotice); 
     }
     public function edit(Apartment $apartment){ 
         $tower = $apartment->tower; 
@@ -72,22 +77,27 @@ class ApartmentController extends Controller {
         ]);
         $data['active']=$r->boolean('active');
         $apartment->update($data);
+        $ownerPasswordNotice = '';
         if (!empty($data['owner_email'])) {
             $user = \App\Models\User::where('email',$data['owner_email'])->first();
             if (!$user) {
+                $ownerPassword = $data['owner_password'] ?: \Illuminate\Support\Str::random(12);
                 $user = \App\Models\User::create([
                     'name' => $data['owner_name'] ?: 'Propietario',
                     'email'=> $data['owner_email'],
-                    'password' => bcrypt($data['owner_password'] ?: '1234'),
+                    'password' => bcrypt($ownerPassword),
                     'active' => true,
                 ]);
+                if (empty($data['owner_password'])) {
+                    $ownerPasswordNotice = ' Contraseña generada para '.$data['owner_email'].': '.$ownerPassword;
+                }
             }
             \App\Models\Ownership::firstOrCreate([
                 'apartment_id' => $apartment->id,
                 'user_id'      => $user->id,
             ]);
         }
-        return redirect()->route('towers.apartments.index',$tower)->with('status','Apartamento actualizado'); 
+        return redirect()->route('towers.apartments.index',$tower)->with('status','Apartamento actualizado.'.$ownerPasswordNotice); 
     }
     public function destroy(Apartment $apartment){ 
         $tower = $apartment->tower; 

@@ -18,39 +18,6 @@ Route::get('/', function () { return redirect()->route('login'); });
 Route::get('login', [\App\Http\Controllers\Auth\LoginController::class,'showLogin'])->middleware('guest')->name('login');
 Route::post('login', [\App\Http\Controllers\Auth\LoginController::class,'login'])->middleware('guest')->name('login.perform');
 Route::post('logout', [\App\Http\Controllers\Auth\LoginController::class,'logout'])->name('logout');
-// Debug temporal de sesión y host (solo en entorno local)
-if (env('APP_DEBUG')) {
-    Route::get('debug/session', function(\Illuminate\Http\Request $r){
-        return response()->json([
-            'host' => $r->getHost(),
-            'session_id' => $r->session()->getId(),
-            'csrf_token' => csrf_token(),
-            'user' => auth()->user()?->only(['id','email']),
-            'cookie_session' => $_COOKIE[config('session.cookie')] ?? null,
-        ]);
-    });
-    Route::get('debug/auth', function(\Illuminate\Http\Request $r){
-        $tenantDb = config('database.connections.tenant.database') ?? null;
-        // eager load roles para inspección
-        $usersRaw = \App\Models\User::with('roles')->get();
-        $users = $usersRaw->map(function($u){
-            return [
-                'id' => $u->id,
-                'email' => $u->email,
-                'active' => $u->active,
-                'roles' => $u->roles->pluck('name'),
-                'has_super_admin' => $u->hasRole('super_admin'),
-                'created_at' => $u->created_at,
-            ];
-        });
-        return response()->json([
-            'host' => $r->getHost(),
-            'tenant_db' => $tenantDb,
-            'users' => $users,
-            'count' => $users->count(),
-        ]);
-    });
-}
 Route::middleware(['auth'])->prefix('invoices')->group(function(){
     Route::get('', [\App\Http\Controllers\InvoiceController::class,'index'])->name('invoices.index');
     Route::get('create', [\App\Http\Controllers\InvoiceController::class,'create'])->name('invoices.create');
@@ -113,6 +80,11 @@ Route::middleware(['auth'])->post('accounts/transfer',[\App\Http\Controllers\Acc
 // Exchange
 Route::middleware(['auth'])->get('exchange/create',[\App\Http\Controllers\ExchangeTransactionController::class,'create'])->name('exchange.create');
 Route::middleware(['auth'])->post('exchange',[\App\Http\Controllers\ExchangeTransactionController::class,'store'])->name('exchange.store');
+// Fondo de reserva por torre
+Route::middleware(['auth'])->get('reserve-funds',[\App\Http\Controllers\ReserveFundController::class,'index'])->name('reserve-funds.index');
+Route::middleware(['auth'])->get('reserve-funds/{reserveFund}',[\App\Http\Controllers\ReserveFundController::class,'show'])->name('reserve-funds.show');
+Route::middleware(['auth'])->get('reserve-funds/{reserveFund}/movements/create',[\App\Http\Controllers\ReserveFundController::class,'createMovement'])->name('reserve-funds.movements.create');
+Route::middleware(['auth'])->post('reserve-funds/{reserveFund}/movements',[\App\Http\Controllers\ReserveFundController::class,'storeMovement'])->name('reserve-funds.movements.store');
 // Password reset (sin auth)
 Route::get('password/forgot',[\App\Http\Controllers\PasswordResetController::class,'showForgot']);
 Route::post('password/forgot',[\App\Http\Controllers\PasswordResetController::class,'sendLink']);

@@ -1,11 +1,14 @@
 <?php
 namespace App\Http\Controllers; 
 use App\Models\{Invoice,ExpenseItem,CurrencyRate,Tower,Apartment,PaymentReport}; 
+use App\Http\Requests\{StoreInvoiceRequest,UpdateInvoiceRequest};
 use Dompdf\Dompdf; 
 use Dompdf\Options; 
 use Illuminate\Http\Request; 
 use App\Services\BillingService;
+use App\Services\AuditService;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
 class InvoiceController extends Controller {
     public function index(Request $request){
@@ -165,6 +168,10 @@ class InvoiceController extends Controller {
                     }
                 }
             }
+            app(AuditService::class)->log('invoice_marked_paid','Invoice',$invoice->id,[
+                'cascade' => $request->boolean('cascade'),
+                'late_fee_accrued_usd' => $lateUsd,
+            ]);
         } 
         return redirect()->route('invoices.show',$invoice); 
     }
@@ -201,6 +208,7 @@ class InvoiceController extends Controller {
             $childInvoices = collect();
             foreach($itemsByApt as $apartmentId=>$rows){
                 $totalUsd = round($rows->sum('subtotal_usd'),2);
+                $totalVes = round($rows->sum('subtotal_ves'),2);
                 $aptCode = optional($aptRows->get($apartmentId))->code ?? ('APT-'.$apartmentId);
                 $childTowerId = $invoice->tower_id ?? optional($aptRows->get($apartmentId))->tower_id;
 
@@ -235,7 +243,7 @@ class InvoiceController extends Controller {
                     'late_fee_value'    => $invoice->late_fee_value,
                     'exchange_rate_used'=> $usedRate,
                     'total_usd'         => $totalUsd,
-                    'total_ves'         => round($totalUsd * $usedRate, 2),
+                    'total_ves'         => $totalVes,
                     'owner_name'        => $ownerName,
                     'owner_email'       => $ownerEmail,
                     'owner_document'    => $ownerDocument,
@@ -247,8 +255,10 @@ class InvoiceController extends Controller {
                         'apartment_id'    => $row->apartment_id,
                         'expense_item_id' => $row->expense_item_id,
                         'base_amount_usd' => $row->base_amount_usd,
+                        'base_amount_ves' => $row->base_amount_ves,
                         'quantity'        => $row->quantity,
                         'distributed'     => $row->distributed,
+                        'is_reserve'      => $row->is_reserve,
                         'subtotal_usd'    => $row->subtotal_usd,
                         'subtotal_ves'    => $row->subtotal_ves,
                     ]);
@@ -268,6 +278,9 @@ class InvoiceController extends Controller {
             $child = $byApt->get($pair->apartment_id);
             if($user && $user->email && $child){ \Mail::to($user->email)->queue(new \App\Mail\InvoiceCreatedMail($child)); }
         }
+        app(AuditService::class)->log('invoice_approved','Invoice',$invoice->id,[
+            'children_count' => $childInvoices->count(),
+        ]);
         return redirect()->route('invoices.show',$invoice)->with('status','Factura aprobada y sub-facturas generadas');
     }
     public function show(Invoice $invoice){ 
@@ -308,8 +321,8 @@ class InvoiceController extends Controller {
         if($selectedTower){ $apartmentsQuery->where('tower_id',$selectedTower->id); }
         $apartments = $apartmentsQuery->orderBy('code')->get();
         $items = ExpenseItem::where('active',true)->orderBy('name')->get();
-        // Prefill: aggregate current invoice items by expense_item_id
-        $existing = $invoice->items()->with('expenseItem')->get(['expense_item_id','apartment_id','base_amount_usd','subtotal_usd','distributed','quantity']);
+        // Prefill: aggregate current invoice items by expense_item_id (excluyendo el fondo de reserva, que es autogenerado)
+        $existing = $invoice->items()->where('is_reserve', false)->with('expenseItem')->get(['expense_item_id','apartment_id','base_amount_usd','base_amount_ves','subtotal_usd','distributed','quantity']);
         $selectedApartmentIds = $existing->pluck('apartment_id')->unique()->values();
         $grouped = [];
         foreach($existing as $row){
@@ -320,6 +333,7 @@ class InvoiceController extends Controller {
                     'name'=> optional($row->expenseItem)->name ?? ('Item '.$eid),
                     'type'=> optional($row->expenseItem)->type ?? '-',
                     'amount'=>(float)($row->base_amount_usd ?? 0),
+                    'amount_ves'=>(float)($row->base_amount_ves ?? 0),
                     'quantity'=> (int) ($row->quantity ?? 1),
                     'distribution'=> $row->distributed ? 'aliquota' : 'equal',
                     'apartment_ids'=> [],
@@ -333,37 +347,15 @@ class InvoiceController extends Controller {
         $prefill = [];
         foreach($grouped as $g){
             $g['amount'] = round((float)($g['amount'] ?? 0), 2);
+            $g['amount_ves'] = round((float)($g['amount_ves'] ?? 0), 2);
             $g['apartment_ids'] = collect($g['apartment_ids'] ?? [])->filter()->unique()->values()->all();
             $prefill[] = $g;
         }
         return view('invoices.edit',compact('invoice','selectedTower','towers','apartments','items','prefill','selectedApartmentIds','activeRate'));
     }
-    public function store(Request $r, BillingService $billing){
-        $this->authorize('store',Invoice::class);
-        $data=$r->validate([
-            'tower_id'        =>'nullable|exists:tenant.towers,id',
-            'period'          =>'required|date_format:Y-m',
-            'apartment_ids'   =>'nullable|array',
-            'items_payload'   =>'nullable|string',
-            'late_fee_type'   =>'nullable|in:percent,fixed',
-            'late_fee_scope'  =>'nullable|in:day,week,month',
-            'late_fee_value'  =>'nullable|numeric|min:0'
-        ]);
-        $rawPayload = $data['items_payload'] ?? '[]';
-        $items = json_decode($rawPayload, true);
-        if(!is_array($items)){
-            $items = [];
-        }
-        if(count($items) > 0){
-            if(empty($data['apartment_ids']) || !is_array($data['apartment_ids'])){
-                return back()->withErrors(['apartment_ids'=>'Debes seleccionar al menos un apartamento'])->withInput();
-            }
-            foreach($items as $i){
-                if(($i['amount'] ?? 0) < 0){ return back()->withErrors(['items_payload'=>'Monto negativo no permitido'])->withInput(); }
-                if(!in_array(($i['distribution'] ?? 'aliquota'), ['aliquota','equal'])){ return back()->withErrors(['items_payload'=>'Distribución inválida'])->withInput(); }
-            }
-        }
-        // Adaptar al BillingService: extraer ids y pasar detalles por separado
+    public function store(StoreInvoiceRequest $r, BillingService $billing){
+        $data = $r->validated();
+        $items = $r->items();
         $expenseItemIds = array_map(fn($i)=>$i['expense_item_id'], $items);
         $invoice=$billing->generateInvoice(
             $data['period'],
@@ -371,116 +363,24 @@ class InvoiceController extends Controller {
             $data['apartment_ids'] ?? [],
             ['type'=>$data['late_fee_type']??null,'scope'=>$data['late_fee_scope']??null,'value'=>$data['late_fee_value']??null],
             $data['tower_id']??null,
-            $items // pasar detalles por ítem (amount, quantity, distribution)
+            $items // detalles por ítem (amount, quantity, distribution)
         );
         return redirect()->route('invoices.show',$invoice); 
     }
-    public function update(Invoice $invoice, Request $r, BillingService $billing){
-        $this->authorize('update',$invoice);
+    public function update(Invoice $invoice, UpdateInvoiceRequest $r, BillingService $billing){
         if($invoice->status!=='draft'){ return redirect()->route('invoices.show',$invoice)->with('status','Solo se puede editar en borrador'); }
-        $data=$r->validate([
-            'tower_id'        =>'nullable|exists:tenant.towers,id',
-            'period'          =>'required|date_format:Y-m',
-            'apartment_ids'   =>'nullable|array',
-            'items_payload'   =>'nullable|string',
-            'late_fee_type'   =>'nullable|in:percent,fixed',
-            'late_fee_scope'  =>'nullable|in:day,week,month',
-            'late_fee_value'  =>'nullable|numeric|min:0'
-        ]);
-        $rawPayload = $data['items_payload'] ?? '[]';
-        $items = json_decode($rawPayload, true);
-        if(!is_array($items)){
-            $items = [];
-        }
-        if(count($items) > 0){
-            if(empty($data['apartment_ids']) || !is_array($data['apartment_ids'])){
-                return back()->withErrors(['apartment_ids'=>'Debes seleccionar al menos un apartamento'])->withInput();
-            }
-            foreach($items as $i){
-                if(($i['amount'] ?? 0) < 0){ return back()->withErrors(['items_payload'=>'Monto negativo no permitido'])->withInput(); }
-                if(!in_array(($i['distribution'] ?? 'aliquota'), ['aliquota','equal'])){ return back()->withErrors(['items_payload'=>'Distribución inválida'])->withInput(); }
-            }
-        }
-        // Rebuild invoice items: delete current and re-generate with service (keeping same invoice record)
-        \DB::transaction(function() use ($invoice){ $invoice->items()->delete(); });
+        $data = $r->validated();
+        $items = $r->items();
         $expenseItemIds = array_map(fn($i)=>$i['expense_item_id'], $items);
-
-        // Si no hay ítems, permitir guardar borrador vacío
-        if(count($items) === 0){
-            $rate = \App\Models\CurrencyRate::where('active',true)->orderByDesc('valid_from')->first();
-            $invoice->update([
-                'tower_id'          => $data['tower_id'] ?? $invoice->tower_id,
-                'period'            => $data['period'],
-                'late_fee_type'     => $data['late_fee_type'] ?? null,
-                'late_fee_scope'    => $data['late_fee_scope'] ?? null,
-                'late_fee_value'    => $data['late_fee_value'] ?? null,
-                'exchange_rate_used'=> $rate ? $rate->rate : $invoice->exchange_rate_used,
-                'total_usd'         => 0,
-                'total_ves'         => 0,
-            ]);
-            return redirect()->route('invoices.show',$invoice)->with('status','Factura actualizada');
-        }
-
-        // Temporarily compute using service by creating a new invoice object would create another record.
-        // Instead, we simulate generation and update totals for existing invoice.
-        $rate = \App\Models\CurrencyRate::where('active',true)->orderByDesc('valid_from')->first();
-        $apartments   = \App\Models\Apartment::whereIn('id',$data['apartment_ids'])->get();
-        $expenseItems = \App\Models\ExpenseItem::whereIn('id',$expenseItemIds)->get();
-        $totalUsd     = 0;
-        $detailsById = [];
-        foreach($items as $d){ $detailsById[(int)$d['expense_item_id']] = $d; }
-        foreach($expenseItems as $item){
-            $detail = $detailsById[$item->id] ?? ['amount'=>0,'quantity'=>1,'distribution'=>'aliquota'];
-            $totalAmount = (float) ($detail['amount'] ?? 0);
-            $quantity    = max(1, (int) ($detail['quantity'] ?? 1));
-            $distribution= $detail['distribution'] ?? 'aliquota';
-            // Per-item apartments override
-            $itemApartmentIds = collect($detail['apartment_ids'] ?? [])->filter()->map(fn($v)=>(int)$v)->values();
-            $apartmentsForItem = $itemApartmentIds->isNotEmpty() ? \App\Models\Apartment::whereIn('id',$itemApartmentIds)->get() : $apartments;
-            if($distribution === 'aliquota'){
-                $sumAliquot = $apartmentsForItem->sum('aliquot_percent');
-                foreach($apartmentsForItem as $ap){
-                    $portion = $sumAliquot > 0 ? round($totalAmount * ($ap->aliquot_percent / $sumAliquot),2) : 0;
-                    $subtotal = $portion * $quantity;
-                    $totalUsd += $subtotal;
-                    \App\Models\InvoiceItem::create([
-                        'invoice_id'      => $invoice->id,
-                        'apartment_id'    => $ap->id,
-                        'expense_item_id' => $item->id,
-                        'base_amount_usd' => $totalAmount,
-                        'quantity'        => $quantity,
-                        'distributed'     => true,
-                        'subtotal_usd'    => $subtotal,
-                        'subtotal_ves'    => $subtotal * ($rate->rate ?? 0),
-                    ]);
-                }
-            } else {
-                $portionEach = round($totalAmount * $quantity, 2);
-                foreach($apartmentsForItem as $ap){
-                    $totalUsd += $portionEach;
-                    \App\Models\InvoiceItem::create([
-                        'invoice_id'      => $invoice->id,
-                        'apartment_id'    => $ap->id,
-                        'expense_item_id' => $item->id,
-                        'base_amount_usd' => $totalAmount,
-                        'quantity'        => $quantity,
-                        'distributed'     => false,
-                        'subtotal_usd'    => $portionEach,
-                        'subtotal_ves'    => $portionEach * ($rate->rate ?? 0),
-                    ]);
-                }
-            }
-        }
-        $invoice->update([
-            'tower_id'          => $data['tower_id'] ?? $invoice->tower_id,
-            'period'            => $data['period'],
-            'late_fee_type'     => $data['late_fee_type'] ?? null,
-            'late_fee_scope'    => $data['late_fee_scope'] ?? null,
-            'late_fee_value'    => $data['late_fee_value'] ?? null,
-            'exchange_rate_used'=> $rate->rate ?? $invoice->exchange_rate_used,
-            'total_usd'         => $totalUsd,
-            'total_ves'         => $totalUsd * ($rate->rate ?? 0),
-        ]);
+        $billing->regenerateInvoice(
+            $invoice,
+            $data['period'],
+            $expenseItemIds,
+            $data['apartment_ids'] ?? [],
+            ['type'=>$data['late_fee_type']??null,'scope'=>$data['late_fee_scope']??null,'value'=>$data['late_fee_value']??null],
+            $data['tower_id']??null,
+            $items
+        );
         return redirect()->route('invoices.show',$invoice)->with('status','Factura actualizada');
     }
 }

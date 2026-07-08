@@ -50,12 +50,14 @@ class NormalizeTenantAdmins extends Command
             if (!$old && !$new) {
                 $this->info('No existe admin. Creando admin@admin.com.');
                 if ($dry) { continue; }
+                $generated = \Illuminate\Support\Str::random(16);
                 $u = User::on('tenant')->create([
                     'name' => 'Administrador',
                     'email' => 'admin@admin.com',
-                    'password' => bcrypt('1234'),
+                    'password' => bcrypt($generated),
                     'active' => true,
                 ]);
+                $this->warn('Contraseña generada para admin@admin.com ('.$condo->subdomain.'): '.$generated);
                 $this->ensureSuper($u);
                 continue;
             }

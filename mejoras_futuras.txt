@@ -1,0 +1,112 @@
+MEJORAS FUTURAS — Los Robles
+============================================================
+Actualizado: 2026-07-06
+Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
+
+------------------------------------------------------------
+1. TESTING (ALTA)
+------------------------------------------------------------
+[ ] Definir BD de test separada en phpunit.xml (descomentar env DB_* apuntando
+    a sqlite o a una BD "los_robles_test"). HOY: los tests viejos con
+    RefreshDatabase BORRAN la BD de desarrollo si se corre `php artisan test`
+    completo. Solo es seguro correr:
+    php artisan test --filter "InvoiceLateFeeTest|BillingServiceTest"
+[ ] Tests de policies (InvoicePolicy, PaymentReportPolicy, etc.):
+    que un owner no vea/edite facturas de otro apartamento.
+[ ] Tests de aislamiento multi-tenant: que un request con host de un condominio
+    no acceda a datos de otro (IdentifyCondominium + UsesTenantConnection).
+[ ] Tests de PaymentReport: aprobar/rechazar pago, cascada a factura padre,
+    movimientos de cuenta generados.
+[ ] Test del flujo approve(): generación de facturas hijas por apartamento,
+    numeración INV-{period}-{aptCode}, snapshot de owner, envío de mail en cola.
+
+------------------------------------------------------------
+2. FRONTEND / VISTAS (MEDIA)
+------------------------------------------------------------
+[ ] Extraer el JS inline duplicado de invoices/create.blade.php y
+    invoices/edit.blade.php a un archivo compartido (public/js/invoice-form.js
+    o resources/js con mix). Hoy hay ~300 líneas duplicadas y ya se corrigió
+    un bug solo en create (parseDecimalValue, oninput sin re-render) que
+    habría que replicar/unificar en edit.
+[ ] Aplicar a edit.blade.php el mismo endurecimiento JS hecho en create:
+    - parseDecimalValue (coma decimal, Number.isFinite)
+    - inputs de monto con oninput y actualización directa (sin re-render,
+      evita perder el foco al escribir)
+    - eliminar variables temporales @php lejos de su uso (patrón que ya
+      causó errores 500 con vistas compiladas viejas en producción).
+[x] edit.blade.php: faltaba </div> de cierre en el bloque "Mora valor"
+    (col-md-3 sin cerrar antes del <hr>). Corregido 2026-07-06.
+[ ] Validación visual en el form (marcar en rojo montos inválidos antes
+    de enviar) en vez de depender solo del backend.
+[ ] Paginación/lazy-load en el selector de apartamentos si un condominio
+    crece (hoy se renderizan todos los checkboxes de golpe).
+
+------------------------------------------------------------
+3. MULTI-TENANCY / ARQUITECTURA (MEDIA)
+------------------------------------------------------------
+[ ] Limpiar la deriva de esquema master vs tenant: hay migraciones en
+    database/migrations (master) y database/migrations/tenant que tocan
+    tablas parecidas. Documentar cuál manda y eliminar duplicadas.
+    (No se tocó por riesgo: producción ya está migrada.)
+[ ] Quitar/bajar a debug los Log::info del trait UsesTenantConnection
+    (loguea por cada modelo instanciado; ensucia logs y cuesta I/O).
+[ ] Varias migraciones tenant usan Schema::connection('tenant') hardcodeado
+    en vez de la conexión del migrator; unificar al patrón sin connection()
+    para que `migrate --database=X` funcione siempre (afectó a los tests).
+[ ] Cachear la resolución host->condominium en IdentifyCondominium
+    (hoy consulta la BD master en cada request).
+[ ] Manejo explícito de requests por IP (sin host conocido): hoy devuelven
+    "condominio no encontrado"; considerar respuesta 404 limpia o redirect.
+
+------------------------------------------------------------
+4. SEGURIDAD (MEDIA — lo crítico ya se corrigió)
+------------------------------------------------------------
+[x] LoginController: logs sensibles y fallback manual eliminados.
+[x] Rutas /debug/session y /debug/auth eliminadas.
+[x] Contraseñas hardcodeadas (1234/12345678) reemplazadas por aleatorias.
+[x] Tokens Sanctum con expiración (30 días, env SANCTUM_TOKEN_EXPIRATION).
+[ ] Rate limiting en el login web (throttle por IP+email) — hoy solo la API
+    tiene rate limit.
+[ ] Política de contraseñas (mínimo 8+, Password::defaults()) en registro,
+    reset y creación de propietarios.
+[ ] Revisar cabeceras de seguridad en nginx (X-Frame-Options, CSP básica,
+    HSTS si no está).
+[ ] 2FA opcional para super_admin / condo_admin.
+
+------------------------------------------------------------
+5. FACTURACIÓN / DOMINIO (BAJA-MEDIA)
+------------------------------------------------------------
+[ ] Job programado (schedule) para recalcular/notificar mora vencida y
+    enviar recordatorios de pago (hoy la mora se calcula on-the-fly).
+[ ] Anulación de facturas aprobadas (nota de crédito / status voided)
+    en vez de solo draft->approved->paid.
+[ ] Histórico de tasas: guardar la tasa usada por pago (hoy solo por
+    factura via exchange_rate_used).
+[ ] Reporte de morosidad por torre/apartamento exportable (CSV/PDF).
+[ ] Números de factura: secuencia por condominio garantizada con lock
+    (riesgo teórico de colisión bajo concurrencia).
+
+------------------------------------------------------------
+6. OPERACIONES / DX (BAJA)
+------------------------------------------------------------
+[ ] Migrar phpunit.xml al esquema nuevo: vendor/bin/phpunit --migrate-configuration
+    (quita el WARN de "deprecated schema").
+[ ] Script de deploy en el VPS (deploy.sh): git pull + view:clear +
+    optimize:clear + config:cache + restart php8.3-fpm, para no hacerlo
+    a mano cada vez.
+[ ] Healthcheck real (ruta /up o /health que verifique BD master y tenant)
+    y monitoreo (UptimeRobot o similar).
+[ ] Backups automáticos de master_condominios y condo_losrobles (mysqldump
+    + cron + retención). CRÍTICO tenerlo aunque es "operaciones".
+[ ] Rotación de logs de Laravel (daily driver) si no está configurada.
+[ ] Colas: verificar worker (queue:work) supervisado con systemd/supervisor
+    para los mails de InvoiceCreatedMail; si no, usar sync conscientemente.
+[ ] Actualizar dependencias: Laravel 10 -> 11/12 cuando haya ventana
+    (10 sale de soporte de seguridad en 2025).
+
+
+# NO TOCAR:
+
+Rol	Email	Contraseña
+Super Admin	admin@admin.com	1234
+Propietarios	user_A_01@user.com … user_C_54@user.com	12345678

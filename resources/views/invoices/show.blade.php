@@ -197,10 +197,16 @@
 					@forelse($visibleItems as $it)
 						<tr class="item-row"
 							data-apto="{{ strtolower($it->apartment->code ?? $it->apartment_id) }}"
-							data-concepto="{{ strtolower($it->expenseItem->name ?? '') }}">
+							data-concepto="{{ strtolower($it->is_reserve ? 'fondo de reserva' : ($it->expenseItem->name ?? '')) }}">
 							<td>{{ $it->apartment->code ?? ('#'.$it->apartment_id) }}</td>
-							<td>{{ $it->expenseItem->name ?? ('Item '.$it->expense_item_id) }}</td>
-							<td>{{ (($it->expenseItem->type ?? 'fixed') === 'aliquot') ? 'Alícuota' : 'Fijo' }}</td>
+							<td>
+								@if($it->is_reserve)
+									<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><i class="bi bi-piggy-bank me-1"></i>Fondo de Reserva</span>
+								@else
+									{{ $it->expenseItem->name ?? ('Item '.$it->expense_item_id) }}
+								@endif
+							</td>
+							<td>{{ $it->is_reserve ? 'Reserva' : ((($it->expenseItem->type ?? 'fixed') === 'aliquot') ? 'Alícuota' : 'Fijo') }}</td>
 							<td class="text-end">{{ number_format($it->subtotal_usd,2) }}</td>
 							<td class="text-end">{{ number_format($it->subtotal_ves,2) }}</td>
 						</tr>

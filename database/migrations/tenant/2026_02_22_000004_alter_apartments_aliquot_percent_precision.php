@@ -11,6 +11,11 @@ return new class extends Migration {
             return;
         }
 
+        // Solo MySQL: sqlite (tests) ya usa suficiente precisión numérica
+        if (DB::connection(Schema::getConnection()->getName())->getDriverName() !== 'mysql') {
+            return;
+        }
+
         // MySQL: change DECIMAL precision without requiring doctrine/dbal
         DB::statement("ALTER TABLE apartments MODIFY aliquot_percent DECIMAL(12,8) NOT NULL DEFAULT 0");
     }
@@ -18,6 +23,10 @@ return new class extends Migration {
     public function down(): void
     {
         if (!Schema::hasTable('apartments') || !Schema::hasColumn('apartments', 'aliquot_percent')) {
+            return;
+        }
+
+        if (DB::connection(Schema::getConnection()->getName())->getDriverName() !== 'mysql') {
             return;
         }
 

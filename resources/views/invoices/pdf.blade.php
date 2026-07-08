@@ -97,8 +97,8 @@
 			@if(!$isChild)
 				<td>{{ $it->apartment->code ?? ('Apto #'.$it->apartment_id) }}</td>
 			@endif
-			<td>{{ $it->expenseItem->name ?? ('Item '.$it->expense_item_id) }}</td>
-			<td>{{ (($it->expenseItem->type ?? 'fixed') === 'aliquot') ? 'Alícuota' : 'Fijo' }}</td>
+			<td>{{ $it->is_reserve ? 'Fondo de Reserva' : ($it->expenseItem->name ?? ('Item '.$it->expense_item_id)) }}</td>
+			<td>{{ $it->is_reserve ? 'Reserva' : ((($it->expenseItem->type ?? 'fixed') === 'aliquot') ? 'Alícuota' : 'Fijo') }}</td>
 			<td class="right">{{ number_format($it->subtotal_usd,2) }}</td>
 			<td class="right">{{ number_format($it->subtotal_ves,2) }}</td>
 		</tr>

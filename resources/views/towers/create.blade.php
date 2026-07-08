@@ -15,6 +15,11 @@
 				<label class="form-label">Nombre</label>
 				<input name="name" class="form-control" required>
 			</div>
+			<div class="mb-3">
+				<label class="form-label">Fondo de reserva (%)</label>
+				<input type="number" step="0.01" min="0" max="100" name="reserve_percent" class="form-control" value="{{ old('reserve_percent', 0) }}">
+				<div class="form-text">Porcentaje que aporta cada apartamento de esta torre a su fondo de reserva, sobre el subtotal de su factura. 0 = sin fondo.</div>
+			</div>
 			<div class="form-check mb-3">
 				<input type="hidden" name="active" value="0">
 				<input type="checkbox" name="active" value="1" class="form-check-input" id="activeCheck" checked>

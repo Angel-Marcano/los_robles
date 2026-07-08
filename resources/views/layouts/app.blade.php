@@ -153,6 +153,11 @@
 					</a>
 				</li>
 				<li class="nav-item">
+					<a class="nav-link {{ Request::routeIs('reserve-funds.*') ? 'active' : '' }}" href="{{ route('reserve-funds.index') }}">
+						<i class="bi bi-piggy-bank me-1"></i>Fondo de Reserva
+					</a>
+				</li>
+				<li class="nav-item">
 					<a class="nav-link {{ Request::routeIs('exchange.*') ? 'active' : '' }}" href="{{ route('exchange.create') }}">
 						<i class="bi bi-arrow-left-right me-1"></i>Cambio
 					</a>

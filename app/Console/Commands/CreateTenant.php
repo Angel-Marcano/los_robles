@@ -8,7 +8,7 @@ use App\Models\Condominium;
 
 class CreateTenant extends Command
 {
-    protected $signature = 'tenants:create {name} {subdomain} {--db=} {--seed}';
+    protected $signature = 'tenants:create {name} {subdomain} {--db=} {--seed} {--admin-password= : Contraseña del admin inicial (si se omite, se genera una aleatoria)}';
     protected $description = 'Crea un nuevo condominio (tenant): BD, registro, migraciones y seeding opcional.';
 
     public function handle(): int
@@ -84,11 +84,12 @@ class CreateTenant extends Command
             $adminEmail = 'admin@admin.com';
             $existing = \App\Models\User::where('email',$adminEmail)->first();
             if (!$existing) {
+                $adminPassword = $this->option('admin-password') ?: \Illuminate\Support\Str::random(16);
                 app()->instance('currentCondominium', $condominium); // asegurar trait para User
                 $user = \App\Models\User::on('tenant')->create([
                     'name' => 'Administrador',
                     'email' => $adminEmail,
-                    'password' => bcrypt('1234'),
+                    'password' => bcrypt($adminPassword),
                     'active' => true,
                 ]);
                 // Rol super_admin si tabla roles existe
@@ -103,7 +104,10 @@ class CreateTenant extends Command
                         $this->warn('No se pudo asignar rol super_admin: '.$e->getMessage());
                     }
                 }
-                $this->info('Usuario super_admin creado: '.$adminEmail.' / 1234');
+                $this->info('Usuario super_admin creado: '.$adminEmail);
+                if (!$this->option('admin-password')) {
+                    $this->warn('Contraseña generada: '.$adminPassword.' (guárdala; no se volverá a mostrar)');
+                }
             } else {
                 $this->line('Usuario admin ya existía, se omite creación.');
             }

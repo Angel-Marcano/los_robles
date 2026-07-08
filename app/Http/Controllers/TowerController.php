@@ -13,8 +13,9 @@ class TowerController extends Controller {
         return view('towers.create'); 
     }
     public function store(Request $r){ 
-        $data = $r->validate(['name'=>'required|string|max:120','active'=>'nullable|boolean']); 
+        $data = $r->validate(['name'=>'required|string|max:120','active'=>'nullable|boolean','reserve_percent'=>'nullable|numeric|min:0|max:100']); 
         $data['active'] = $r->boolean('active');
+        $data['reserve_percent'] = $data['reserve_percent'] ?? 0;
         Tower::create($data); 
         return redirect()->route('towers.index'); 
     }
@@ -22,8 +23,9 @@ class TowerController extends Controller {
         return view('towers.edit',compact('tower')); 
     }
     public function update(Request $r, Tower $tower){ 
-        $data=$r->validate(['name'=>'required|string|max:120','active'=>'nullable|boolean']); 
+        $data=$r->validate(['name'=>'required|string|max:120','active'=>'nullable|boolean','reserve_percent'=>'nullable|numeric|min:0|max:100']); 
         $data['active']=$r->boolean('active');
+        $data['reserve_percent'] = $data['reserve_percent'] ?? 0;
         $tower->update($data); 
         return redirect()->route('towers.index'); 
     }

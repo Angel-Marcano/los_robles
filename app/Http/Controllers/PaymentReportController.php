@@ -5,6 +5,7 @@ use App\Models\{Invoice, PaymentReport, CurrencyRate};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Services\AuditService;
+use App\Services\ReserveFundService;
 use Illuminate\Support\Facades\DB;
 
 class PaymentReportController extends Controller
@@ -198,6 +199,10 @@ class PaymentReportController extends Controller
                     'late_fee_accrued_usd' => $lateUsd,
                     'late_fee_accrued_ves' => $lateVes,
                 ]);
+
+                // Ingreso automático al fondo de reserva de la torre (fondos aislados por torre).
+                $invoice->refresh();
+                app(ReserveFundService::class)->creditFromPaidInvoice($invoice);
 
                 // Si es una sub-factura, verificar si todas las hermanas están pagadas para marcar al padre.
                 if ($invoice->parent_id) {

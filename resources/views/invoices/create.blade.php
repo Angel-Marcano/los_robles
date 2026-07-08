@@ -20,7 +20,6 @@
 	<form method="POST" action="{{route('invoices.store')}}" class="card">
 		<div class="card-body">
 		@csrf
-		@php($currentRate = (float)($activeRate->rate ?? 0))
 		@if($selectedTower)<input type="hidden" name="tower_id" value="{{$selectedTower->id}}">@endif
 		<div class="mb-3">
 			<label class="form-label">Periodo</label>
@@ -79,7 +78,7 @@
 		<div class="mb-3">
 			<div class="d-flex justify-content-between align-items-center">
 				<label class="form-label m-0">Agregar gastos a esta factura</label>
-				<span class="text-muted small">Tasa activa: <strong id="rateLabel">{{ number_format($currentRate, 2) }}</strong> VES/USD</span>
+				<span class="text-muted small">Tasa activa: <strong id="rateLabel">{{ number_format((float)((isset($activeRate) && $activeRate) ? $activeRate->rate : 0), 2) }}</strong> VES/USD</span>
 				<div class="d-flex gap-2">
 					<input type="text" id="expenseSearch" class="form-control" placeholder="Buscar gasto..." oninput="filterExpenseOptions()">
 					<select id="expenseSelect" class="form-select">
@@ -119,6 +118,17 @@
 																		<th colspan="5" class="text-end text-muted fw-normal small">
 																			Promedio por apartamento: <strong id="estimatedPerApt">0.00</strong> USD
 																			<span class="ms-2">(sobre <span id="selectedAptCount">0</span> seleccionados)</span>
+																		</th>
+																	</tr>
+																	<tr id="reserveRow" style="display:none;">
+																		<th colspan="5" class="text-end text-info fw-normal small">
+																			<i class="bi bi-piggy-bank me-1"></i>Fondo de reserva estimado: <strong id="estimatedReserve">0.00</strong> USD
+																			<span class="ms-2 text-muted">(según el % de cada torre)</span>
+																		</th>
+																	</tr>
+																	<tr id="grandTotalRow" style="display:none;">
+																		<th colspan="5" class="text-end">
+																			Total estimado con reserva: <strong id="estimatedGrandTotal">0.00</strong> USD
 																		</th>
 																	</tr>
 										</tfoot>
@@ -190,8 +200,17 @@ function syncPeriod(){
 	const y = document.getElementById('periodYear').value;
 	document.getElementById('periodValue').value = y + '-' + m;
 }
-const activeRate = {{ $currentRate > 0 ? $currentRate : 0 }};
+const activeRate = {{ (float)((isset($activeRate) && $activeRate) ? $activeRate->rate : 0) }};
+const aptData = @json($apartments->mapWithKeys(fn($a) => [$a->id => ['aliquot' => (float) $a->aliquot_percent, 'tower' => $a->tower_id]]));
+const towerReserve = @json($towers->mapWithKeys(fn($t) => [$t->id => (float) ($t->reserve_percent ?? 0)]));
+function round2(x){ return Math.round((Number(x) + Number.EPSILON) * 100) / 100; }
 const items = new Map();
+function parseDecimalValue(value){
+	if(typeof value === 'number'){ return Number.isFinite(value) ? value : 0; }
+	const normalized = String(value ?? '').replace(',', '.').trim();
+	const parsed = parseFloat(normalized);
+	return Number.isFinite(parsed) ? parsed : 0;
+}
 function markAddedExpenses(){
 	const select = document.getElementById('expenseSelect');
 	Array.from(select.options).forEach(opt => {
@@ -213,22 +232,27 @@ function removeExpenseRow(id){ items.delete(String(id)); renderItems(); }
 function updateField(id, field, value){
 	const it = items.get(String(id)); if(!it) return;
 	if(field === 'amount'){
-		value = parseFloat(value || 0);
-		it.amount = value;
-		it.amount_ves = activeRate > 0 ? (value * activeRate) : 0;
+		const parsed = parseDecimalValue(value);
+		it.amount = parsed;
+		it.amount_ves = activeRate > 0 ? (parsed * activeRate) : 0;
 		items.set(String(id), it);
-		renderItems();
+		// Actualizar el campo VES sin re-render (para no perder el foco ni el valor tecleado)
+		const row = document.querySelector(`#invoiceItemsTable tbody tr[data-id='${id}']`);
+		if(row){ const vesInput = row.querySelector('.amount-ves-input'); if(vesInput){ vesInput.value = it.amount_ves.toFixed(2); } }
+		syncPayload();
 		return;
 	}
 	if(field === 'amount_ves'){
-		value = parseFloat(value || 0);
-		it.amount_ves = value;
-		it.amount = activeRate > 0 ? (value / activeRate) : 0;
+		const parsed = parseDecimalValue(value);
+		it.amount_ves = parsed;
+		it.amount = activeRate > 0 ? (parsed / activeRate) : 0;
 		items.set(String(id), it);
-		renderItems();
+		const row = document.querySelector(`#invoiceItemsTable tbody tr[data-id='${id}']`);
+		if(row){ const usdInput = row.querySelector('.amount-usd-input'); if(usdInput){ usdInput.value = it.amount.toFixed(2); } }
+		syncPayload();
 		return;
 	}
-	if(field === 'quantity'){ value = parseFloat(value || 0); }
+	if(field === 'quantity'){ value = parseInt(value || 1, 10) || 1; }
 	it[field] = value; items.set(String(id), it); syncPayload();
 }
 function renderItems(){
@@ -236,10 +260,11 @@ function renderItems(){
 	tbody.innerHTML = '';
 	for(const [id, it] of items.entries()){
 		const tr = document.createElement('tr');
+		tr.dataset.id = id;
 		tr.innerHTML = `
 			<td>${document.querySelector(`#expenseSelect option[value='${id}']`).dataset.name}</td>
-			<td><input type="number" step="0.01" class="form-control form-control-sm" value="${it.amount}" onchange="updateField('${id}','amount',this.value)"></td>
-			<td><input type="number" step="0.01" class="form-control form-control-sm" value="${(it.amount_ves ?? ((it.amount||0)*activeRate)).toFixed(2)}" onchange="updateField('${id}','amount_ves',this.value)"></td>
+			<td><input type="number" step="0.01" class="form-control form-control-sm amount-usd-input" value="${it.amount}" oninput="updateField('${id}','amount',this.value)"></td>
+			<td><input type="number" step="0.01" class="form-control form-control-sm amount-ves-input" value="${(it.amount_ves ?? ((it.amount||0)*activeRate)).toFixed(2)}" oninput="updateField('${id}','amount_ves',this.value)"></td>
 			<td><input type="number" step="1" class="form-control form-control-sm" value="${it.quantity}" onchange="updateField('${id}','quantity',this.value)"></td>
 			<td>
 				<select class="form-select form-select-sm" onchange="updateField('${id}','distribution',this.value)">
@@ -257,8 +282,9 @@ function renderItems(){
 function syncPayload(){
 	const arr = Array.from(items.values()).map(i => ({
 		expense_item_id: i.expense_item_id,
-		amount: parseFloat(i.amount || 0),
-		quantity: parseInt(i.quantity || 1),
+		amount: parseDecimalValue(i.amount || 0),
+		amount_ves: parseDecimalValue(i.amount_ves || 0),
+		quantity: parseInt(i.quantity || 1, 10) || 1,
 		distribution: i.distribution || 'aliquota',
 	}));
 	document.getElementById('itemsPayload').value = JSON.stringify(arr);
@@ -268,8 +294,8 @@ function syncPayload(){
 	let totalAliquota = 0;
 	let totalEqual = 0;
 	arr.forEach(it => {
-		const amt = parseFloat(it.amount || 0);
-		const qty = parseInt(it.quantity || 1);
+		const amt = parseDecimalValue(it.amount || 0);
+		const qty = parseInt(it.quantity || 1, 10) || 1;
 		const t = (amt * qty);
 		if(it.distribution === 'aliquota'){
 			// Alícuota: el monto se reparte entre apartamentos
@@ -286,6 +312,43 @@ function syncPayload(){
 	document.getElementById('estimatedEqual').innerText = totalEqual.toFixed(2) + (aptCount > 0 ? ' x' + aptCount + ' = ' + (totalEqual * aptCount).toFixed(2) : '');
 	document.getElementById('selectedAptCount').innerText = aptCount;
 	document.getElementById('estimatedPerApt').innerText = aptCount > 0 ? (total / aptCount).toFixed(2) : '0.00';
+
+	// Estimación del fondo de reserva: cada apartamento aporta el % de su propia torre
+	// sobre su subtotal de gastos comunes (replica la lógica de BillingService).
+	const selectedApts = Array.from(document.querySelectorAll('.apt-check:checked')).map(cb => cb.value);
+	const aptSub = {};
+	selectedApts.forEach(id => { aptSub[id] = 0; });
+	arr.forEach(it => {
+		const amt = parseDecimalValue(it.amount || 0);
+		const qty = parseInt(it.quantity || 1, 10) || 1;
+		if(it.distribution === 'aliquota'){
+			let sumAliq = 0;
+			selectedApts.forEach(id => { sumAliq += (aptData[id]?.aliquot || 0); });
+			selectedApts.forEach(id => {
+				const frac = sumAliq > 0 ? ((aptData[id]?.aliquot || 0) / sumAliq) : 0;
+				aptSub[id] += round2(amt * frac) * qty;
+			});
+		} else {
+			selectedApts.forEach(id => { aptSub[id] += round2(amt * qty); });
+		}
+	});
+	let reserveUsd = 0;
+	selectedApts.forEach(id => {
+		const pct = towerReserve[aptData[id]?.tower] || 0;
+		reserveUsd += round2(aptSub[id] * pct / 100);
+	});
+	reserveUsd = round2(reserveUsd);
+	const reserveRow = document.getElementById('reserveRow');
+	const grandTotalRow = document.getElementById('grandTotalRow');
+	if(reserveUsd > 0){
+		document.getElementById('estimatedReserve').innerText = reserveUsd.toFixed(2);
+		document.getElementById('estimatedGrandTotal').innerText = (total + reserveUsd).toFixed(2);
+		reserveRow.style.display = '';
+		grandTotalRow.style.display = '';
+	} else {
+		reserveRow.style.display = 'none';
+		grandTotalRow.style.display = 'none';
+	}
 }
 
 function filterExpenseOptions(){
