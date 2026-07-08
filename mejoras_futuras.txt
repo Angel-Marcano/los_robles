@@ -65,13 +65,20 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
 [x] Rutas /debug/session y /debug/auth eliminadas.
 [x] Contraseñas hardcodeadas (1234/12345678) reemplazadas por aleatorias.
 [x] Tokens Sanctum con expiración (30 días, env SANCTUM_TOKEN_EXPIRATION).
-[ ] Rate limiting en el login web (throttle por IP+email) — hoy solo la API
-    tiene rate limit.
+[x] Rate limiting en el login web (throttle por IP+email) — hecho 2026-07-08:
+    5 intentos/min por email+IP en LoginController (RateLimiter manual) +
+    límite duro 10/min por IP (throttle:login) en la ruta POST.
 [ ] Política de contraseñas (mínimo 8+, Password::defaults()) en registro,
     reset y creación de propietarios.
 [ ] Revisar cabeceras de seguridad en nginx (X-Frame-Options, CSP básica,
     HSTS si no está).
-[ ] 2FA opcional para super_admin / condo_admin.
+[x] 2FA opcional para TODOS los usuarios (opt-in desde Mi Perfil, desactivado
+    por defecto) — hecho 2026-07-08. Métodos: código por correo (6 dígitos,
+    expira 10 min, un solo uso, envío síncrono) y app autenticadora TOTP
+    (pragmarx/google2fa + QR SVG). Desactivar requiere contraseña. Auditado.
+    Pendiente fase 2: códigos de recuperación y "recordar dispositivo";
+    un admin puede desactivar el 2FA de un usuario editando la BD si pierde
+    acceso (falta botón en gestión de Usuarios).
 
 ------------------------------------------------------------
 5. FACTURACIÓN / DOMINIO (BAJA-MEDIA)

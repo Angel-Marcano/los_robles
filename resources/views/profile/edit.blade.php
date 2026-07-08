@@ -90,6 +90,86 @@
 		</div>
 	</div>
 
+	{{-- Verificación en dos pasos --}}
+	<div class="col-lg-6">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-shield-check me-1"></i>Verificación en dos pasos (2FA)</div>
+			<div class="card-body">
+				@if($user->twoFactorEnabled())
+					<p>
+						<span class="badge bg-success"><i class="bi bi-check-lg me-1"></i>Activada</span>
+						<span class="text-muted ms-2">Método: <strong>{{ $user->two_factor_method === 'totp' ? 'App autenticadora' : 'Código por correo' }}</strong></span>
+					</p>
+					<p class="text-muted small">Al iniciar sesión se te pedirá un código adicional.</p>
+					<form method="POST" action="{{ route('profile.2fa.disable') }}" class="row g-2 align-items-end">
+						@csrf @method('DELETE')
+						<div class="col-md-7">
+							<label class="form-label">Contraseña actual</label>
+							<input type="password" name="password" class="form-control" required>
+						</div>
+						<div class="col-md-5">
+							<button class="btn btn-outline-danger btn-action w-100"><i class="bi bi-shield-x"></i> Desactivar</button>
+						</div>
+					</form>
+				@elseif($user->two_factor_method)
+					{{-- Activación pendiente de confirmar --}}
+					<p><span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Pendiente de confirmación</span>
+						<span class="text-muted ms-2">Método: <strong>{{ $user->two_factor_method === 'totp' ? 'App autenticadora' : 'Código por correo' }}</strong></span>
+					</p>
+					@if($user->two_factor_method === 'totp')
+						@php
+							$qrSvg = \App\Http\Controllers\TwoFactorSettingsController::totpQrSvg($user);
+							$totpSecret = \App\Http\Controllers\TwoFactorSettingsController::totpSecret($user);
+						@endphp
+						<div class="text-center mb-3">
+							@if($qrSvg){!! $qrSvg !!}@endif
+							<div class="text-muted small mt-2">¿No puedes escanear? Ingresa esta clave manualmente:</div>
+							<code class="user-select-all">{{ $totpSecret }}</code>
+						</div>
+						<p class="text-muted small">Escanea el QR con Google Authenticator, Authy o similar, y confirma con el código de 6 dígitos.</p>
+					@else
+						<p class="text-muted small">Revisa tu correo <strong>{{ $user->email }}</strong> e ingresa el código de 6 dígitos (expira en 10 minutos).</p>
+					@endif
+					<form method="POST" action="{{ route('profile.2fa.confirm') }}" class="row g-2 align-items-end mb-2">
+						@csrf
+						<div class="col-md-7">
+							<label class="form-label">Código de verificación</label>
+							<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" class="form-control font-monospace" placeholder="123456" required>
+						</div>
+						<div class="col-md-5">
+							<button class="btn btn-success btn-action w-100"><i class="bi bi-check-lg"></i> Confirmar</button>
+						</div>
+					</form>
+					<div class="d-flex gap-2">
+						@if($user->two_factor_method === 'email')
+						<form method="POST" action="{{ route('profile.2fa.email') }}">
+							@csrf
+							<button class="btn btn-link btn-sm text-muted p-0">Reenviar código</button>
+						</form>
+						@endif
+						<form method="POST" action="{{ route('profile.2fa.cancel') }}" class="ms-auto">
+							@csrf
+							<button class="btn btn-link btn-sm text-danger p-0">Cancelar activación</button>
+						</form>
+					</div>
+				@else
+					<p><span class="badge bg-secondary">Desactivada</span></p>
+					<p class="text-muted small">Agrega una capa extra de seguridad: al iniciar sesión se pedirá un código además de tu contraseña.</p>
+					<div class="d-flex gap-2 flex-wrap">
+						<form method="POST" action="{{ route('profile.2fa.email') }}">
+							@csrf
+							<button class="btn btn-outline-primary btn-action"><i class="bi bi-envelope"></i> Activar por correo</button>
+						</form>
+						<form method="POST" action="{{ route('profile.2fa.totp') }}">
+							@csrf
+							<button class="btn btn-outline-primary btn-action"><i class="bi bi-phone"></i> Activar con app autenticadora</button>
+						</form>
+					</div>
+				@endif
+			</div>
+		</div>
+	</div>
+
 	{{-- Info de cuenta --}}
 	<div class="col-lg-6">
 		<div class="card">

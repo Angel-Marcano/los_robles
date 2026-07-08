@@ -16,7 +16,11 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', function () { return redirect()->route('login'); });
 // Auth routes (minimal)
 Route::get('login', [\App\Http\Controllers\Auth\LoginController::class,'showLogin'])->middleware('guest')->name('login');
-Route::post('login', [\App\Http\Controllers\Auth\LoginController::class,'login'])->middleware('guest')->name('login.perform');
+Route::post('login', [\App\Http\Controllers\Auth\LoginController::class,'login'])->middleware(['guest','throttle:login'])->name('login.perform');
+// Desafío 2FA (usuario aún no autenticado; estado en sesión)
+Route::get('login/2fa', [\App\Http\Controllers\Auth\TwoFactorChallengeController::class,'show'])->middleware('guest')->name('2fa.challenge');
+Route::post('login/2fa', [\App\Http\Controllers\Auth\TwoFactorChallengeController::class,'verify'])->middleware(['guest','throttle:login'])->name('2fa.verify');
+Route::post('login/2fa/resend', [\App\Http\Controllers\Auth\TwoFactorChallengeController::class,'resend'])->middleware(['guest','throttle:login'])->name('2fa.resend');
 Route::post('logout', [\App\Http\Controllers\Auth\LoginController::class,'logout'])->name('logout');
 Route::middleware(['auth'])->prefix('invoices')->group(function(){
     Route::get('', [\App\Http\Controllers\InvoiceController::class,'index'])->name('invoices.index');
@@ -35,6 +39,12 @@ Route::middleware(['auth'])->prefix('invoices')->group(function(){
 Route::middleware(['auth'])->get('profile', [\App\Http\Controllers\ProfileController::class,'edit'])->name('profile.edit');
 Route::middleware(['auth'])->patch('profile', [\App\Http\Controllers\ProfileController::class,'update'])->name('profile.update');
 Route::middleware(['auth'])->patch('profile/password', [\App\Http\Controllers\ProfileController::class,'updatePassword'])->name('profile.password');
+// Verificación en dos pasos (perfil)
+Route::middleware(['auth'])->post('profile/2fa/email', [\App\Http\Controllers\TwoFactorSettingsController::class,'enableEmail'])->name('profile.2fa.email');
+Route::middleware(['auth'])->post('profile/2fa/totp', [\App\Http\Controllers\TwoFactorSettingsController::class,'enableTotp'])->name('profile.2fa.totp');
+Route::middleware(['auth'])->post('profile/2fa/confirm', [\App\Http\Controllers\TwoFactorSettingsController::class,'confirm'])->name('profile.2fa.confirm');
+Route::middleware(['auth'])->post('profile/2fa/cancel', [\App\Http\Controllers\TwoFactorSettingsController::class,'cancel'])->name('profile.2fa.cancel');
+Route::middleware(['auth'])->delete('profile/2fa', [\App\Http\Controllers\TwoFactorSettingsController::class,'disable'])->name('profile.2fa.disable');
 // Users
 Route::middleware(['auth'])->resource('users', \App\Http\Controllers\UserController::class);
 Route::patch('users/{user}/toggle', [\App\Http\Controllers\UserController::class,'toggle'])->name('users.toggle');
