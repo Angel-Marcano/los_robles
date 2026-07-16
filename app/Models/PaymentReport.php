@@ -3,17 +3,23 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PaymentReport extends Model
 {
-	use HasFactory, \App\Models\Traits\UsesTenantConnection;
+	use HasFactory, SoftDeletes, \App\Models\Traits\UsesTenantConnection;
 
-	protected $fillable = ['invoice_id','user_id','amount_usd','amount_ves','exchange_rate_used','usd_equivalent','status','files','notes'];
-	protected $casts = ['amount_usd' => 'decimal:2','amount_ves' => 'decimal:2','usd_equivalent' => 'decimal:2','files' => 'array'];
+	protected $fillable = ['invoice_id','user_id','amount_usd','amount_ves','exchange_rate_used','exchange_rate_valid_from','currency_rate_id','usd_equivalent','status','files','notes'];
+	protected $casts = ['amount_usd' => 'decimal:2','amount_ves' => 'decimal:2','usd_equivalent' => 'decimal:2','exchange_rate_valid_from' => 'datetime','files' => 'array'];
 
 	public function invoice()
 	{
 		return $this->belongsTo(Invoice::class);
+	}
+
+	public function currencyRate()
+	{
+		return $this->belongsTo(CurrencyRate::class);
 	}
 
 	public function statusLabel(): string

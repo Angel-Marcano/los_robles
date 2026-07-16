@@ -31,6 +31,8 @@
 					<button class="btn btn-primary w-100 btn-action mb-3"><i class="bi bi-box-arrow-in-right me-1"></i> Entrar</button>
 					<div class="text-center">
 						<a href="{{ url('password/forgot') }}" class="text-muted small">¿Olvidaste tu contraseña?</a>
+						<span class="text-muted mx-1">·</span>
+						<a href="{{ route('legal.terms') }}" class="text-muted small">Términos de uso</a>
 					</div>
 				</form>
 			</div>

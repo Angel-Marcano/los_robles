@@ -6,8 +6,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Invoice extends Model
 {
     use HasFactory, SoftDeletes, \App\Models\Traits\UsesTenantConnection;
-    protected $fillable=['number','parent_id','apartment_id','tower_id','created_by','period','due_date','status','late_fee_type','late_fee_scope','late_fee_value','late_fee_accrued_usd','late_fee_accrued_ves','exchange_rate_used','total_usd','total_ves','paid_at','paid_exchange_rate','owner_name','owner_email','owner_document'];
-    protected $casts=['paid_at'=>'datetime','due_date'=>'date','total_usd'=>'decimal:2','total_ves'=>'decimal:2','late_fee_value'=>'decimal:2','late_fee_accrued_usd'=>'decimal:2','late_fee_accrued_ves'=>'decimal:2','paid_exchange_rate'=>'decimal:6'];
+    protected $fillable=['number','correlative','parent_id','apartment_id','tower_id','created_by','period','due_date','status','late_fee_type','late_fee_scope','late_fee_value','late_fee_accrued_usd','late_fee_accrued_ves','exchange_rate_used','total_usd','total_ves','paid_at','paid_exchange_rate','invoice_signature','signed_at','voided_at','void_reason','reissued_by','reissued_to_invoice_id','reissued_from_invoice_id','reminder_sent_at','owner_name','owner_email','owner_document'];
+    protected $casts=['paid_at'=>'datetime','due_date'=>'date','signed_at'=>'datetime','voided_at'=>'datetime','reminder_sent_at'=>'datetime','correlative'=>'integer','reissued_to_invoice_id'=>'integer','reissued_from_invoice_id'=>'integer','total_usd'=>'decimal:2','total_ves'=>'decimal:2','late_fee_value'=>'decimal:2','late_fee_accrued_usd'=>'decimal:2','late_fee_accrued_ves'=>'decimal:2','paid_exchange_rate'=>'decimal:6'];
 
     public function statusLabel(): string
     {
@@ -18,9 +18,18 @@ class Invoice extends Model
                 return 'Pendiente';
             case 'paid':
                 return 'Pagada';
+            case 'voided':
+                return 'Anulada';
+            case 'reissued':
+                return 'Reemplazada';
             default:
                 return strtoupper((string) $this->status);
         }
+    }
+
+    public function isVoided(): bool
+    {
+        return in_array((string) $this->status, ['voided', 'reissued'], true);
     }
 
     public function lateFeeScopeLabel(): string
@@ -90,7 +99,9 @@ class Invoice extends Model
     public function creator(){return $this->belongsTo(User::class,'created_by');}
     public function parent(){return $this->belongsTo(Invoice::class,'parent_id');}
     public function children(){return $this->hasMany(Invoice::class,'parent_id');}
-    public function apartment(){return $this->belongsTo(Apartment::class);}    
+    public function apartment(){return $this->belongsTo(Apartment::class);}
+    public function reissuedTo(){return $this->belongsTo(Invoice::class,'reissued_to_invoice_id');}
+    public function reissuedFrom(){return $this->belongsTo(Invoice::class,'reissued_from_invoice_id');}
 
     public function paymentReports(){return $this->hasMany(PaymentReport::class);} 
 

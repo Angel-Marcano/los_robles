@@ -20,6 +20,7 @@
 				$badgeClass = match($invoice->status) {
 					'paid' => 'success',
 					'pending' => 'warning',
+					'voided' => 'dark',
 					default => 'secondary',
 				};
 			@endphp
@@ -29,6 +30,21 @@
 
 	<div class="card mb-3">
 		<div class="card-body">
+			<div class="row g-3 mb-3">
+				<div class="col-md-9">
+					<div class="alert alert-light border mb-0">
+						<div class="fw-semibold mb-1"><i class="bi bi-shield-check me-1"></i>Verificación antifalsificación</div>
+						<div class="small text-muted mb-1">Esta factura incluye firma criptográfica y QR de verificación pública.</div>
+						<a href="{{ $verifyUrl }}" target="_blank" rel="noopener" class="small">{{ $verifyUrl }}</a>
+					</div>
+				</div>
+				<div class="col-md-3 text-center">
+					<div class="border rounded p-2 d-inline-block bg-white">
+						{!! $invoiceQrSvg !!}
+					</div>
+				</div>
+			</div>
+
 			@if($invoice->parent_id)
 				<div class="alert alert-info py-2 mb-3">
 					Factura individual del apartamento
@@ -108,6 +124,16 @@
 				<button class="btn btn-success" onclick="return confirm('¿Aprobar factura y notificar a propietarios?')">Aprobar</button>
 			</form>
 		@endif
+		@can('void', $invoice)
+			@if(in_array($invoice->status, ['pending','paid']))
+				<button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#voidInvoiceModal">Anular</button>
+			@endif
+		@endcan
+		@can('reissue', $invoice)
+			@if(in_array($invoice->status, ['pending','paid']))
+				<button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#reissueInvoiceModal">Reemitir</button>
+			@endif
+		@endcan
 		@if($invoice->status==='pending')
 			@php
 				$reportedSelf = ($invoice->paymentReports ?? collect())->where('status', 'reported')->count() > 0;
@@ -430,6 +456,63 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 </script>
 @endpush
+
+@can('void', $invoice)
+@if(in_array($invoice->status, ['pending','paid']))
+<div class="modal fade" id="voidInvoiceModal" tabindex="-1" aria-labelledby="voidInvoiceModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ route('invoices.void', $invoice) }}">
+        @csrf @method('PATCH')
+        <div class="modal-header">
+          <h5 class="modal-title" id="voidInvoiceModalLabel">Anular factura</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="voidReason" class="form-label">Motivo de anulación</label>
+            <textarea class="form-control" id="voidReason" name="reason" rows="3" required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-danger" onclick="return confirm('¿Anular esta factura? Esta acción es lógica y reversible solo por reemisión.')">Anular</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endif
+@endcan
+
+@can('reissue', $invoice)
+@if(in_array($invoice->status, ['pending','paid']))
+<div class="modal fade" id="reissueInvoiceModal" tabindex="-1" aria-labelledby="reissueInvoiceModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ route('invoices.reissue', $invoice) }}">
+        @csrf
+        <div class="modal-header">
+          <h5 class="modal-title" id="reissueInvoiceModalLabel">Reemitir factura</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted">Se anulará la factura actual y se creará un borrador clonado. Deberás aprobar el borrador para generar la nueva factura con correlativo.</p>
+          <div class="mb-3">
+            <label for="reissueReason" class="form-label">Motivo de reemisión</label>
+            <textarea class="form-control" id="reissueReason" name="reason" rows="3" required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary" onclick="return confirm('¿Reemitir esta factura? La actual será anulada y se creará un borrador.')">Reemitir</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endif
+@endcan
 
 @endsection
 

@@ -24,7 +24,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')->hourly();
+        // Recalcular morosidad y enviar recordatorios diariamente a las 08:00
+        $schedule->command('invoices:notify-overdue')->dailyAt('08:00');
     }
 
     /**

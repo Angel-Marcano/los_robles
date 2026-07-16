@@ -3,8 +3,8 @@ namespace App\Http\Controllers;
 
 use App\Models\{Invoice, PaymentReport, CurrencyRate};
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use App\Services\AuditService;
+use App\Services\PaymentAttachmentStorageService;
 use App\Services\ReserveFundService;
 use Illuminate\Support\Facades\DB;
 
@@ -54,7 +54,7 @@ class PaymentReportController extends Controller
         ]);
     }
 
-    public function store(Request $r, Invoice $invoice)
+    public function store(Request $r, Invoice $invoice, PaymentAttachmentStorageService $attachmentStorage)
     {
         $this->authorize('create', \App\Models\PaymentReport::class);
 
@@ -108,7 +108,7 @@ class PaymentReportController extends Controller
         $paths = [];
         if ($r->hasFile('files')) {
             foreach ($r->file('files') as $file) {
-                $paths[] = $file->store('payments', 'public');
+                $paths[] = $attachmentStorage->storeForInvoice($file, $invoice);
             }
         }
 
@@ -119,6 +119,8 @@ class PaymentReportController extends Controller
             'amount_ves'          => $amountVes,
             // Reemplaza operador nullsafe (PHP8) por ternario para compatibilidad PHP7.4
             'exchange_rate_used'  => $rate ? $rate->rate : 0,
+            'exchange_rate_valid_from' => $rate ? $rate->valid_from : null,
+            'currency_rate_id'    => $rate ? $rate->id : null,
             'usd_equivalent'      => round((float) $thisReportUsdEq, 2),
             'status'              => 'reported',
             'files'               => $paths,
@@ -129,9 +131,12 @@ class PaymentReportController extends Controller
         return redirect()->route('invoices.show', $invoice);
     }
 
-    public function review(PaymentReport $paymentReport)
+    public function review(PaymentReport $paymentReport, PaymentAttachmentStorageService $attachmentStorage)
     {
-        return view('payments.review', compact('paymentReport'));
+        $files = is_array($paymentReport->files) ? $paymentReport->files : [];
+        $fileLinks = $attachmentStorage->buildReviewLinks($files);
+
+        return view('payments.review', compact('paymentReport', 'fileLinks'));
     }
 
     public function approve(PaymentReport $paymentReport)

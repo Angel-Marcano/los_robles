@@ -14,6 +14,9 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', function () { return redirect()->route('login'); });
+Route::view('/terminos', 'legal.terms')->name('legal.terms');
+Route::get('/verify/invoice/{token}', [\App\Http\Controllers\VerifyInvoiceController::class, 'show'])->name('verify.invoice');
+Route::get('/v/{token}', [\App\Http\Controllers\VerifyInvoiceController::class, 'show'])->name('verify.invoice.short');
 // Auth routes (minimal)
 Route::get('login', [\App\Http\Controllers\Auth\LoginController::class,'showLogin'])->middleware('guest')->name('login');
 Route::post('login', [\App\Http\Controllers\Auth\LoginController::class,'login'])->middleware(['guest','throttle:login'])->name('login.perform');
@@ -71,6 +74,10 @@ Route::middleware(['auth'])->patch('payments/{paymentReport}/reject', [\App\Http
 
 // Aprobar factura (borrador -> pendiente)
 Route::middleware(['auth'])->patch('invoices/{invoice}/approve', [\App\Http\Controllers\InvoiceController::class,'approve'])->name('invoices.approve');
+// Anular factura aprobada/pagada
+Route::middleware(['auth'])->patch('invoices/{invoice}/void', [\App\Http\Controllers\InvoiceController::class,'void'])->name('invoices.void');
+// Reemitir factura aprobada/pagada (genera borrador clonado y marca original reemplazada)
+Route::middleware(['auth'])->post('invoices/{invoice}/reissue', [\App\Http\Controllers\InvoiceController::class,'reissue'])->name('invoices.reissue');
 
 // Tasas de cambio
 Route::middleware(['auth'])->get('rates', [\App\Http\Controllers\CurrencyRateController::class,'index'])->name('rates.index');

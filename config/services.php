@@ -30,4 +30,14 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'enviatusms' => [
+        'api_key' => env('ENVIATUSMS_API_KEY'),
+        'base_url' => env('ENVIATUSMS_BASE_URL', 'https://www.enviatusms.com/api'),
+        'endpoint_balance' => env('ENVIATUSMS_ENDPOINT_BALANCE', 'balance'),
+        'endpoint_send' => env('ENVIATUSMS_ENDPOINT_SEND', 'sms/send'),
+        'timeout' => (int) env('ENVIATUSMS_TIMEOUT', 10),
+        'retry_times' => (int) env('ENVIATUSMS_RETRY_TIMES', 1),
+        'retry_sleep_ms' => (int) env('ENVIATUSMS_RETRY_SLEEP_MS', 200),
+    ],
+
 ];

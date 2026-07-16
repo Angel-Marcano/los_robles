@@ -236,6 +236,32 @@ Datos se aíslan a nivel de conexión. Evita usar modelos landlord dentro del te
 | Foreign key falla en tenant | Intento de FK a `users` | No crear FK a usuarios (están en landlord) |
 | Columnas faltan en `invoice_items` | Tenants antiguos | Crear migración incremental para añadir `base_amount_usd` y `distributed` |
 
+## Adjuntos de pagos (S3/Local híbrido)
+
+Los comprobantes de pago ahora usan una capa centralizada para guardar y leer archivos con fallback automático.
+
+Reglas:
+- Si `PAYMENT_FILESYSTEM_DISK=s3` y existen credenciales S3 completas, se usa S3.
+- Si faltan credenciales o adaptador S3, se hace fallback a `PAYMENT_FILESYSTEM_FALLBACK_DISK` (por defecto `public`).
+- Los archivos históricos en local se siguen resolviendo por fallback de lectura.
+
+Estructura de ruta:
+- `{cliente_slug}/facturas/factura_{invoice_id}/comprobantes/{archivo}`
+- Ejemplo: `los-robles/facturas/factura_101/comprobantes/20260716_abc12345_comprobante.jpg`
+
+Variables de entorno:
+
+```bash
+PAYMENT_FILESYSTEM_DISK=public
+PAYMENT_FILESYSTEM_FALLBACK_DISK=public
+PAYMENT_S3_URL_TTL_MINUTES=20
+```
+
+Nota:
+- En S3, los adjuntos se consideran privados y se exponen con URL temporal.
+- El borrado de reportes de pago debe ser lógico (Soft Delete); no se elimina el archivo físico del storage en este flujo.
+- Para habilitar S3 en producción, instala el adaptador oficial de Flysystem S3 si aún no está presente.
+
 ## Licencia
 
 Software interno; derivado de Laravel (MIT). El framework mantiene su licencia original.

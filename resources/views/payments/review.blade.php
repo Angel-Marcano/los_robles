@@ -28,13 +28,13 @@
 				<dd class="col-sm-9">{{ $paymentReport->notes }}</dd>
 			</dl>
 
-			@if(!empty($paymentReport->files))
+			@if(!empty($fileLinks))
 				<hr>
 				<h2 class="h6">Archivos</h2>
 				<ul class="mb-0">
-					@foreach($paymentReport->files as $f)
+					@foreach($fileLinks as $fileLink)
 						<li>
-							<a href="{{ Storage::disk('public')->url($f) }}" target="_blank" rel="noopener">Archivo</a>
+							<a href="{{ $fileLink['url'] }}" target="_blank" rel="noopener">Archivo</a>
 						</li>
 					@endforeach
 				</ul>

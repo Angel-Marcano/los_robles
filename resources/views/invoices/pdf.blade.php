@@ -17,6 +17,10 @@
 		.totals{margin-top:12px;border-top:2px solid #444;padding-top:8px}
 		.totals p{margin:3px 0}
 		.small{font-size:10px;color:#666;margin-top:12px}
+		.verify-block{margin-top:8px;border:1px solid #ccc;padding:6px;display:table;width:100%}
+		.verify-left{display:table-cell;vertical-align:top;width:72%}
+		.verify-right{display:table-cell;vertical-align:top;text-align:right}
+		.verify-url{font-size:9px;word-break:break-all;color:#444}
 		.watermark{position:fixed;top:40%;left:15%;font-size:64px;color:rgba(0,0,0,0.06);transform:rotate(-25deg)}
 		.watermark2{position:fixed;top:65%;left:10%;font-size:64px;color:rgba(0,0,0,0.06);transform:rotate(-25deg)}
 		.watermark3{position:fixed;top:18%;left:20%;font-size:64px;color:rgba(0,0,0,0.06);transform:rotate(-25deg)}
@@ -70,11 +74,18 @@
 		<h2>Total USD {{ number_format($grandUsd,2) }}</h2>
 		<div class="meta">Estado: {{$invoice->statusLabel()}} | Vence: {{$invoice->due_date? $invoice->due_date->format('Y-m-d'):'--'}}<br/>Tasa usada: {{ number_format((float)$invoice->exchange_rate_used, 2) }} @if($invoice->tower) | Torre: {{$invoice->tower->name}} @endif</div>
 	</div>
-    
-    
-    
-    
 </div>
+
+	<div class="verify-block">
+		<div class="verify-left">
+			<strong>Verificación antifalsificación</strong><br>
+			<span class="muted">Escanea el QR o abre esta URL para validar firma y estado.</span>
+			<div class="verify-url">{{ $verifyUrl }}</div>
+		</div>
+		<div class="verify-right">
+			{!! $invoiceQrSvg !!}
+		</div>
+	</div>
 
 @if($items && $items->count())
 <table>

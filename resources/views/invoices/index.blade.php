@@ -23,7 +23,7 @@
                     <label class="form-label">Estado</label>
                     <select name="status" class="form-select">
                         <option value="">-- Todos --</option>
-                        @foreach(($isAdmin ? ['draft'=>'Borrador','pending'=>'Pendiente','paid'=>'Pagada'] : ['pending'=>'Pendiente','paid'=>'Pagada']) as $val=>$label)
+                        @foreach(($isAdmin ? ['draft'=>'Borrador','pending'=>'Pendiente','paid'=>'Pagada','voided'=>'Anulada'] : ['pending'=>'Pendiente','paid'=>'Pagada']) as $val=>$label)
                             <option value="{{ $val }}" @selected(request('status')===$val)>{{ $label }}</option>
                         @endforeach
                     </select>
@@ -100,7 +100,7 @@
                         $isChild = !is_null($inv->parent_id);
                         $isParent = is_null($inv->parent_id) && ($inv->children_count ?? 0) > 0;
                         $rowId = 'inv-'.$inv->id;
-                        $badgeClass = ($inv->status === 'paid') ? 'success' : (($inv->status === 'pending') ? 'warning' : 'secondary');
+                        $badgeClass = ($inv->status === 'paid') ? 'success' : (($inv->status === 'pending') ? 'warning' : (($inv->status === 'voided') ? 'dark' : 'secondary'));
 
                         $towerLabel = null;
                         if($inv->tower){
@@ -172,7 +172,7 @@
                                         <tbody>
                                             @forelse($inv->children as $child)
                                                 @php
-                                                    $childBadge = ($child->status === 'paid') ? 'success' : (($child->status === 'pending') ? 'warning' : 'secondary');
+                                                    $childBadge = ($child->status === 'paid') ? 'success' : (($child->status === 'pending') ? 'warning' : (($child->status === 'voided') ? 'dark' : 'secondary'));
                                                 @endphp
                                                 <tr>
                                                     <td>{{ $child->number ?? ('#'.$child->id) }}</td>

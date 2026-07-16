@@ -1,6 +1,6 @@
 MEJORAS FUTURAS — Los Robles
 ============================================================
-Actualizado: 2026-07-06
+Actualizado: 2026-07-16
 Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
 
 ------------------------------------------------------------
@@ -19,6 +19,14 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
     movimientos de cuenta generados.
 [ ] Test del flujo approve(): generación de facturas hijas por apartamento,
     numeración INV-{period}-{aptCode}, snapshot de owner, envío de mail en cola.
+[ ] Tests de integración SMS (EnviaTuSMS):
+    - fake del cliente HTTP para sendSms() y getBalance()
+    - assert de api_key en query string
+    - assert de manejo de timeout/errores 4xx/5xx.
+[ ] Tests de validación de QR de factura:
+    firma válida, firma alterada, factura anulada, factura de otro condominio.
+[x] Tests unitarios del storage de comprobantes (2026-07-16):
+    ruta por cliente/factura, fallback S3->local y resolución de links históricos.
 
 ------------------------------------------------------------
 2. FRONTEND / VISTAS (MEDIA)
@@ -72,6 +80,28 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
     reset y creación de propietarios.
 [ ] Revisar cabeceras de seguridad en nginx (X-Frame-Options, CSP básica,
     HSTS si no está).
+[ ] Página de Política de Privacidad (ALTA):
+    publicar qué datos se recolectan, finalidad, base legal, retención,
+    terceros/proveedores (correo, SMS), contacto y canal de ejercicio ARCO.
+[ ] Página de Seguridad de la Plataforma (ALTA):
+    prácticas implementadas (2FA, cifrado en tránsito, backups, auditoría),
+    buenas prácticas para usuarios y canal para reporte responsable de fallos.
+[x] Página de Términos y Condiciones de Uso (2026-07-16):
+    responsabilidades, límites del servicio, uso aceptable y vigencia.
+[ ] Banner/aviso de cookies + página de cookies:
+    diferenciar cookies técnicas vs analíticas y su finalidad.
+[ ] Consentimiento y versionado legal:
+    guardar accepted_privacy_at, accepted_terms_at y versión aceptada.
+[ ] Flujo de derechos de datos personales:
+    solicitud de acceso/rectificación/eliminación/exportación de datos.
+[ ] Política de retención y borrado:
+    tiempos de conservación por tipo de dato (facturas, logs, adjuntos, auditoría).
+[x] PaymentReport con borrado lógico (soft delete) aplicado (2026-07-16):
+    se agregó deleted_at en master y tenant; no se eliminan adjuntos físicamente.
+[ ] Endpoint/botón para regenerar link temporal on-demand:
+    hoy se regenera al recargar la vista de revisión; agregar acción explícita para admins.
+[ ] Checklist de alta de proveedor externo:
+    evaluar impacto de privacidad/seguridad antes de integrar nuevos servicios.
 [x] 2FA opcional para TODOS los usuarios (opt-in desde Mi Perfil, desactivado
     por defecto) — hecho 2026-07-08. Métodos: código por correo (6 dígitos,
     expira 10 min, un solo uso, envío síncrono) y app autenticadora TOTP
@@ -83,18 +113,88 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
 ------------------------------------------------------------
 5. FACTURACIÓN / DOMINIO (BAJA-MEDIA)
 ------------------------------------------------------------
-[ ] Job programado (schedule) para recalcular/notificar mora vencida y
-    enviar recordatorios de pago (hoy la mora se calcula on-the-fly).
-[ ] Anulación de facturas aprobadas (nota de crédito / status voided)
-    en vez de solo draft->approved->paid.
-[ ] Histórico de tasas: guardar la tasa usada por pago (hoy solo por
-    factura via exchange_rate_used).
+[x] Job programado (schedule) para recalcular/notificar mora vencida y
+    enviar recordatorios de pago (2026-07-16):
+    comando invoices:notify-overdue, schedule dailyAt('08:00'), recalcula
+    late_fee_accrued_usd/ves, envía InvoiceReminderMail en cola y guarda
+    reminder_sent_at para evitar spam.
+[x] Anulación de facturas aprobadas (status voided) (2026-07-16):
+    InvoicePolicy::void(), InvoiceController::void(), campos voided_at,
+    void_reason, reissued_by; UI con modal de motivo.
+[x] Histórico de tasas por pago (2026-07-16):
+    payment_reports ahora guarda exchange_rate_used + exchange_rate_valid_from
+    + currency_rate_id para trazabilidad de la tasa origen.
 [ ] Reporte de morosidad por torre/apartamento exportable (CSV/PDF).
-[ ] Números de factura: secuencia por condominio garantizada con lock
-    (riesgo teórico de colisión bajo concurrencia).
+[x] Números de factura con secuencia por condominio y lock (2026-07-16):
+    invoices.correlative secuencial + generación transaccional con lockForUpdate
+    y número INV-{period}-{correlative} para reducir colisiones por concurrencia.
+[x] QR antifalsificación por factura (ALTA) (2026-07-16):
+    - incluir QR en PDF/HTML con URL de verificación pública
+    - payload mínimo: invoice_id + tenant_id + hash firmado (HMAC)
+    - no exponer datos sensibles en texto plano dentro del QR.
+[x] Endpoint público de verificación de factura (ALTA) (2026-07-16):
+    GET /verify/invoice/{token} con respuesta clara: válida / anulada / no existe.
+[x] Firma criptográfica de factura (ALTA) (2026-07-16):
+    guardar invoice_signature y signed_at; invalidar firma si cambia monto,
+    estado o datos clave después de aprobada.
+[x] Flujo de reemisión segura (2026-07-16):
+    InvoicePolicy::reissue(), InvoiceController::reissue(), clona ítems en
+    borrador, anula original (voided), enlaza reissued_to/from_invoice_id,
+    genera nueva firma/QR; requiere aprobación del borrador para nuevo correlativo.
+[x] Short link para verificación en QR (2026-07-16):
+    GET /v/{token} apunta a VerifyInvoiceController::show; InvoiceVerificationService
+    genera URL corta en QR y PDF.
 
 ------------------------------------------------------------
-6. OPERACIONES / DX (BAJA)
+6. INTEGRACIONES / COMUNICACIONES (MEDIA)
+------------------------------------------------------------
+[x] Base reusable de EnviaTuSMS creada (2026-07-13):
+    config services.enviatusms, env vars, EnviatuSmsService y tests feature.
+[ ] Integrar SMS en flujos de negocio (feature flags por evento):
+    - factura aprobada
+    - recordatorio de vencimiento
+    - confirmación de pago aprobado/rechazado.
+[ ] Cola para SMS (ALTA):
+    enviar por queue/job y no de forma síncrona en requests web.
+[ ] Plantillas SMS versionadas:
+    centralizar textos por tipo de evento con variables seguras.
+[ ] Opt-in / opt-out de SMS por usuario:
+    consentimiento explícito + auditoría de cambios + fecha de aceptación.
+[ ] Rate limit y anti-spam para SMS:
+    límite por usuario, apartamento y condominio (diario/mensual).
+[ ] Fallback de notificación:
+    si SMS falla, registrar motivo y enviar correo alterno cuando aplique.
+[ ] Integración futura con bot de WhatsApp (ALTA):
+    proveedor por definir (API oficial/meta o gateway), webhook de entrada,
+    plantillas aprobadas y envío transaccional por eventos del sistema.
+[ ] Módulo de chatbot interno en el sistema (ALTA):
+    asistente para responder preguntas frecuentes (saldos, fechas de corte,
+    estado de facturas, pagos reportados, reglas de mora).
+[ ] Chatbot con acciones controladas (ALTA):
+    permitir registros asistidos (crear reporte de pago, registrar ticket,
+    crear recordatorio) solo con permisos y validaciones de negocio.
+[ ] Capa de permisos por intención para bots:
+    diferenciar intents de lectura vs escritura y exigir confirmación explícita
+    para operaciones sensibles (crear/editar/anular).
+[ ] Auditoría de conversaciones y acciones ejecutadas:
+    guardar quién solicitó, qué pidió, respuesta del bot y cambios aplicados.
+[ ] Guardrails de seguridad para IA/chatbot:
+    bloqueo de PII sensible, sanitización de prompts y límite de operaciones
+    por sesión/usuario para reducir abuso.
+[ ] Fallback a humano / mesa de ayuda:
+    escalar conversación cuando el bot no tenga confianza suficiente o ante
+    solicitudes críticas (facturación, reclamos, cambios de propietario).
+[ ] Base de conocimiento del chatbot versionada:
+    fuente única (FAQ/políticas/procesos), revisión por administración y
+    fecha de última actualización visible para el usuario.
+[ ] Canal único de plantillas conversacionales:
+    unificar copy para WhatsApp, SMS y chatbot web con variables seguras.
+[ ] Métricas de calidad del bot:
+    tasa de resolución, derivaciones a humano, tiempo de respuesta y errores
+    de intención para mejora continua.
+
+------------------------------------------------------------
+7. OPERACIONES / DX (BAJA)
 ------------------------------------------------------------
 [ ] Migrar phpunit.xml al esquema nuevo: vendor/bin/phpunit --migrate-configuration
     (quita el WARN de "deprecated schema").
@@ -103,6 +203,8 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
     a mano cada vez.
 [ ] Healthcheck real (ruta /up o /health que verifique BD master y tenant)
     y monitoreo (UptimeRobot o similar).
+[ ] Endpoints legales públicos en footer/login:
+    /privacidad, /seguridad, /terminos, /cookies con enlaces visibles.
 [ ] Backups automáticos de master_condominios y condo_losrobles (mysqldump
     + cron + retención). CRÍTICO tenerlo aunque es "operaciones".
 [ ] Rotación de logs de Laravel (daily driver) si no está configurada.
@@ -110,6 +212,16 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
     para los mails de InvoiceCreatedMail; si no, usar sync conscientemente.
 [ ] Actualizar dependencias: Laravel 10 -> 11/12 cuando haya ventana
     (10 sale de soporte de seguridad en 2025).
+[ ] Rotación/limpieza de comprobantes adjuntos:
+    política de retención, tamaño máximo por archivo y por reporte de pago.
+[x] Storage configurable local/S3 por entorno (2026-07-16):
+    PaymentAttachmentStorageService + config filesystems.payment_attachments
+    + fallback automático a local/public cuando falten credenciales S3.
+[ ] Instalar/verificar adaptador S3 en producción (aws-sdk/flysystem-aws-s3-v3)
+    y agregar checklist de smoke test post-deploy para carga/lectura de adjuntos.
+[ ] Observabilidad de fallback storage:
+    emitir métrica/log estructurado cuando el sistema caiga de S3 a local para detectar
+    credenciales vencidas o errores de configuración.
 
 
 # NO TOCAR:
