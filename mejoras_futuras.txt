@@ -167,26 +167,27 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
 [ ] Integración futura con bot de WhatsApp (ALTA):
     proveedor por definir (API oficial/meta o gateway), webhook de entrada,
     plantillas aprobadas y envío transaccional por eventos del sistema.
-[ ] Módulo de chatbot interno en el sistema (ALTA):
-    asistente para responder preguntas frecuentes (saldos, fechas de corte,
-    estado de facturas, pagos reportados, reglas de mora).
-[ ] Chatbot con acciones controladas (ALTA):
-    permitir registros asistidos (crear reporte de pago, registrar ticket,
-    crear recordatorio) solo con permisos y validaciones de negocio.
-[ ] Capa de permisos por intención para bots:
-    diferenciar intents de lectura vs escritura y exigir confirmación explícita
-    para operaciones sensibles (crear/editar/anular).
-[ ] Auditoría de conversaciones y acciones ejecutadas:
-    guardar quién solicitó, qué pidió, respuesta del bot y cambios aplicados.
-[ ] Guardrails de seguridad para IA/chatbot:
-    bloqueo de PII sensible, sanitización de prompts y límite de operaciones
-    por sesión/usuario para reducir abuso.
-[ ] Fallback a humano / mesa de ayuda:
-    escalar conversación cuando el bot no tenga confianza suficiente o ante
-    solicitudes críticas (facturación, reclamos, cambios de propietario).
-[ ] Base de conocimiento del chatbot versionada:
-    fuente única (FAQ/políticas/procesos), revisión por administración y
-    fecha de última actualización visible para el usuario.
+[x] Módulo de chatbot interno en el sistema (ALTA) (2026-07-17):
+    asistente web embebido, responde FAQs desde KB markdown, consulta saldo,
+    vencimientos y estado de pagos del usuario autenticado.
+[x] Chatbot con acciones controladas (ALTA) (2026-07-17):
+    reporte de pago asistido y creación de ticket de soporte con confirmación
+    inline, validación de ownership y auditoría en chatbot_conversations.
+[x] Capa de permisos por intención para bots (2026-07-17):
+    lectura con scopes de tenant/ownership; escritura requiere confirmación
+    explícita y validación de negocio.
+[x] Auditoría de conversaciones y acciones ejecutadas (2026-07-17):
+    tabla chatbot_conversations guarda input/output sanitizado, tools_called,
+    actions_executed, intent, model, duration_ms y pending_action.
+[x] Guardrails de seguridad para IA/chatbot (MEDIA) (2026-07-17):
+    bloqueo de jailbreak, solicitudes fuera de dominio y límite de operaciones
+    por sesión/usuario implementados en App\Services\Chatbot\Guardrails.
+[x] Fallback a humano / mesa de ayuda (2026-07-17):
+    HumanHandoffService detecta escalamiento, marca needs_human y notifica
+    por email; panel admin para ver conversaciones y marcar resueltas.
+[x] Base de conocimiento del chatbot versionada (2026-07-17):
+    archivos markdown en resources/chatbot/kb/ (general, billing, payments,
+    support); CRUD admin opcional para fase 3.
 [ ] Canal único de plantillas conversacionales:
     unificar copy para WhatsApp, SMS y chatbot web con variables seguras.
 [ ] Métricas de calidad del bot:

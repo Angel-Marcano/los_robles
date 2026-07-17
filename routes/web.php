@@ -17,6 +17,18 @@ Route::get('/', function () { return redirect()->route('login'); });
 Route::view('/terminos', 'legal.terms')->name('legal.terms');
 Route::get('/verify/invoice/{token}', [\App\Http\Controllers\VerifyInvoiceController::class, 'show'])->name('verify.invoice');
 Route::get('/v/{token}', [\App\Http\Controllers\VerifyInvoiceController::class, 'show'])->name('verify.invoice.short');
+
+// Chatbot
+Route::middleware(['auth'])->prefix('chatbot')->group(function () {
+    Route::post('/message', [\App\Http\Controllers\ChatbotController::class, 'message'])->name('chatbot.message');
+    Route::get('/history', [\App\Http\Controllers\ChatbotController::class, 'history'])->name('chatbot.history');
+});
+Route::middleware(['auth'])->prefix('admin/chatbot')->group(function () {
+    Route::get('/conversations', [\App\Http\Controllers\ChatbotAdminController::class, 'conversations'])->name('chatbot.admin.conversations');
+    Route::get('/conversations/{conversation}', [\App\Http\Controllers\ChatbotAdminController::class, 'conversation'])->name('chatbot.admin.conversation');
+    Route::patch('/conversations/{conversation}/resolve', [\App\Http\Controllers\ChatbotAdminController::class, 'resolve'])->name('chatbot.admin.resolve');
+});
+
 // Auth routes (minimal)
 Route::get('login', [\App\Http\Controllers\Auth\LoginController::class,'showLogin'])->middleware('guest')->name('login');
 Route::post('login', [\App\Http\Controllers\Auth\LoginController::class,'login'])->middleware(['guest','throttle:login'])->name('login.perform');

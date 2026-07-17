@@ -13,7 +13,7 @@ return new class extends Migration {
 
         Schema::table('invoices', function (Blueprint $table) {
             if (!Schema::hasColumn('invoices', 'correlative')) {
-                $table->unsignedInteger('correlative')->nullable()->after('number');
+                $table->unsignedInteger('correlative')->nullable();
                 $table->unique('correlative');
             }
         });

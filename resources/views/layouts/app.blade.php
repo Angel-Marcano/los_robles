@@ -227,6 +227,7 @@
 	}, true);
 })();
 </script>
+@include('chatbot.widget')
 @stack('scripts')
 </body>
 </html>

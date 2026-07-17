@@ -13,10 +13,10 @@ return new class extends Migration {
 
         Schema::table('invoices', function (Blueprint $table) {
             if (!Schema::hasColumn('invoices', 'invoice_signature')) {
-                $table->string('invoice_signature', 64)->nullable()->after('paid_exchange_rate');
+                $table->string('invoice_signature', 64)->nullable();
             }
             if (!Schema::hasColumn('invoices', 'signed_at')) {
-                $table->timestamp('signed_at')->nullable()->after('invoice_signature');
+                $table->timestamp('signed_at')->nullable();
             }
         });
     }

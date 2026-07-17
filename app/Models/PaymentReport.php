@@ -9,7 +9,7 @@ class PaymentReport extends Model
 {
 	use HasFactory, SoftDeletes, \App\Models\Traits\UsesTenantConnection;
 
-	protected $fillable = ['invoice_id','user_id','amount_usd','amount_ves','exchange_rate_used','exchange_rate_valid_from','currency_rate_id','usd_equivalent','status','files','notes'];
+	protected $fillable = ['invoice_id','user_id','apartment_id','reported_by','payment_method','reference_number','paid_at','amount_usd','amount_ves','exchange_rate_used','exchange_rate_valid_from','currency_rate_id','usd_equivalent','status','files','notes'];
 	protected $casts = ['amount_usd' => 'decimal:2','amount_ves' => 'decimal:2','usd_equivalent' => 'decimal:2','exchange_rate_valid_from' => 'datetime','files' => 'array'];
 
 	public function invoice()

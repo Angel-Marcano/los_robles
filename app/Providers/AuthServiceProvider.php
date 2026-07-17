@@ -18,8 +18,8 @@ class AuthServiceProvider extends ServiceProvider
         \App\Models\ExpenseItem::class => \App\Policies\ExpenseItemPolicy::class,
     \App\Models\Ownership::class => \App\Policies\OwnershipPolicy::class,
     \App\Models\ReserveFund::class => \App\Policies\ReserveFundPolicy::class,
+        \App\Models\ChatbotConversation::class => \App\Policies\ChatbotConversationPolicy::class,
     ];
-
     /**
      * Register any authentication / authorization services.
      *
