@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\Invoice;
-use BaconQrCode\Renderer\Image\RendererStyle\RendererStyle;
+use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Writer;
 use Illuminate\Support\Str;

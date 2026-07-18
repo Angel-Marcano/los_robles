@@ -56,7 +56,8 @@ class ChatOrchestrator
     {
         $start = microtime(true);
         $context = $this->contextBuilder->build($user);
-        $context['condominium_id'] = optional(tenancy()?->tenant)->id;
+        $currentCondo = app()->bound('currentCondominium') ? app('currentCondominium') : null;
+        $context['condominium_id'] = optional($currentCondo)->id;
         $sanitizedInput = PiiSanitizer::sanitize($message);
 
         // 0. Guardrails: dominio y límites de operaciones

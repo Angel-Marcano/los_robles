@@ -53,6 +53,7 @@
 .chatbot-form { padding: .75rem 1rem; border-top: 1px solid var(--bs-border-color); display: flex; gap: .5rem; background: var(--bs-body-bg); }
 .chatbot-input { flex: 1; border: 1px solid var(--bs-border-color); border-radius: .5rem; padding: .55rem .75rem; font-size: .875rem; background: var(--bs-body-bg); color: var(--bs-body-color); }
 .chatbot-input:focus { outline: none; border-color: var(--bs-primary); box-shadow: 0 0 0 .15rem rgba(var(--bs-primary-rgb),.2); }
+.chatbot-input::placeholder { color: var(--bs-secondary-color); opacity: .7; }
 .chatbot-send { width: 2.5rem; height: 2.5rem; border: none; border-radius: .5rem; background: var(--bs-primary); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .chatbot-send:disabled { opacity: .6; cursor: not-allowed; }
 @media (max-width: 480px) {
@@ -108,7 +109,7 @@
                 body: JSON.stringify({ message: text, session_id: sessionId })
             });
             const data = await res.json();
-            if(data.reply) append(data.reply, 'bot');
+            if(data.message) append(data.message, 'bot');
             else if(data.error) append('Error: ' + data.error, 'bot');
             else append('No recibí respuesta. Intenta de nuevo.', 'bot');
         } catch(err) {
