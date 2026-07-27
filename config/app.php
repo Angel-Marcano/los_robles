@@ -125,6 +125,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Versión de los documentos legales
+    |--------------------------------------------------------------------------
+    |
+    | Versión vigente de Términos, Privacidad, etc. Si cambia, los usuarios
+    | deben volver a aceptar el consentimiento al ingresar.
+    |
+    */
+
+    'legal_version' => env('LEGAL_VERSION', '1.0'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Autoloaded Service Providers
     |--------------------------------------------------------------------------
     |

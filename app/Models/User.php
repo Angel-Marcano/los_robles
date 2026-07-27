@@ -18,7 +18,7 @@ class User extends Authenticatable
      *
      * @var array<int, string>
      */
-    protected $fillable = [ 'name','first_name','last_name','document_type','document_number','email','password','active' ];
+    protected $fillable = [ 'name','first_name','last_name','document_type','document_number','email','password','active','accepted_privacy_at','accepted_terms_at','legal_version' ];
 
     /**
      * The attributes that should be hidden for serialization.
@@ -42,6 +42,8 @@ class User extends Authenticatable
         'active' => 'boolean',
         'two_factor_code_expires_at' => 'datetime',
         'two_factor_confirmed_at' => 'datetime',
+        'accepted_privacy_at' => 'datetime',
+        'accepted_terms_at' => 'datetime',
     ];
 
     public function scopeActive($q){ return $q->where('active',true); }

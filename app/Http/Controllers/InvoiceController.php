@@ -398,7 +398,8 @@ class InvoiceController extends Controller {
             $data['apartment_ids'] ?? [],
             ['type'=>$data['late_fee_type']??null,'scope'=>$data['late_fee_scope']??null,'value'=>$data['late_fee_value']??null],
             $data['tower_id']??null,
-            $items // detalles por ítem (amount, quantity, distribution)
+            $items, // detalles por ítem (amount, quantity, distribution)
+            $r->reserveOpts()
         );
         return redirect()->route('invoices.show',$invoice); 
     }
@@ -414,7 +415,8 @@ class InvoiceController extends Controller {
             $data['apartment_ids'] ?? [],
             ['type'=>$data['late_fee_type']??null,'scope'=>$data['late_fee_scope']??null,'value'=>$data['late_fee_value']??null],
             $data['tower_id']??null,
-            $items
+            $items,
+            $r->reserveOpts()
         );
         return redirect()->route('invoices.show',$invoice)->with('status','Factura actualizada');
     }

@@ -9,7 +9,7 @@ class ReserveFundMovement extends Model
     use HasFactory, \App\Models\Traits\UsesTenantConnection;
 
     protected $fillable = [
-        'reserve_fund_id','direction','source','invoice_id','apartment_id',
+        'reserve_fund_id','direction','source','reserve_type','invoice_id','apartment_id',
         'amount_usd','amount_ves','exchange_rate','notes','user_id',
     ];
     protected $casts = [

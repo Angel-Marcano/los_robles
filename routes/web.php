@@ -15,6 +15,11 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () { return redirect()->route('login'); });
 Route::view('/terminos', 'legal.terms')->name('legal.terms');
+Route::view('/privacidad', 'legal.privacy')->name('legal.privacy');
+Route::view('/seguridad', 'legal.security')->name('legal.security');
+Route::view('/cookies', 'legal.cookies')->name('legal.cookies');
+Route::view('/retencion', 'legal.retention')->name('legal.retention');
+Route::get('/up', [\App\Http\Controllers\HealthController::class, 'up'])->name('health.up');
 Route::get('/verify/invoice/{token}', [\App\Http\Controllers\VerifyInvoiceController::class, 'show'])->name('verify.invoice');
 Route::get('/v/{token}', [\App\Http\Controllers\VerifyInvoiceController::class, 'show'])->name('verify.invoice.short');
 
@@ -37,6 +42,9 @@ Route::get('login/2fa', [\App\Http\Controllers\Auth\TwoFactorChallengeController
 Route::post('login/2fa', [\App\Http\Controllers\Auth\TwoFactorChallengeController::class,'verify'])->middleware(['guest','throttle:login'])->name('2fa.verify');
 Route::post('login/2fa/resend', [\App\Http\Controllers\Auth\TwoFactorChallengeController::class,'resend'])->middleware(['guest','throttle:login'])->name('2fa.resend');
 Route::post('logout', [\App\Http\Controllers\Auth\LoginController::class,'logout'])->name('logout');
+// Consentimiento legal (aceptar privacidad/términos tras login)
+Route::middleware(['auth'])->get('legal/accept', [\App\Http\Controllers\LegalConsentController::class, 'showAccept'])->name('legal.accept');
+Route::middleware(['auth'])->post('legal/accept', [\App\Http\Controllers\LegalConsentController::class, 'accept'])->name('legal.accept.store');
 Route::middleware(['auth'])->prefix('invoices')->group(function(){
     Route::get('', [\App\Http\Controllers\InvoiceController::class,'index'])->name('invoices.index');
     Route::get('create', [\App\Http\Controllers\InvoiceController::class,'create'])->name('invoices.create');
@@ -109,8 +117,10 @@ Route::middleware(['auth'])->post('accounts/transfer',[\App\Http\Controllers\Acc
 // Exchange
 Route::middleware(['auth'])->get('exchange/create',[\App\Http\Controllers\ExchangeTransactionController::class,'create'])->name('exchange.create');
 Route::middleware(['auth'])->post('exchange',[\App\Http\Controllers\ExchangeTransactionController::class,'store'])->name('exchange.store');
-// Fondo de reserva por torre
+// Fondo de reserva (torre + general)
 Route::middleware(['auth'])->get('reserve-funds',[\App\Http\Controllers\ReserveFundController::class,'index'])->name('reserve-funds.index');
+Route::middleware(['auth'])->get('reserve-funds/config',[\App\Http\Controllers\ReserveConfigController::class,'edit'])->name('reserve-funds.config.edit');
+Route::middleware(['auth'])->patch('reserve-funds/config',[\App\Http\Controllers\ReserveConfigController::class,'update'])->name('reserve-funds.config.update');
 Route::middleware(['auth'])->get('reserve-funds/{reserveFund}',[\App\Http\Controllers\ReserveFundController::class,'show'])->name('reserve-funds.show');
 Route::middleware(['auth'])->get('reserve-funds/{reserveFund}/movements/create',[\App\Http\Controllers\ReserveFundController::class,'createMovement'])->name('reserve-funds.movements.create');
 Route::middleware(['auth'])->post('reserve-funds/{reserveFund}/movements',[\App\Http\Controllers\ReserveFundController::class,'storeMovement'])->name('reserve-funds.movements.store');
@@ -125,4 +135,7 @@ Route::middleware(['auth'])->get('audit-logs',[\App\Http\Controllers\AuditLogCon
 // Reportes
 Route::middleware(['auth'])->get('reports/debtors-monthly', [\App\Http\Controllers\ReportController::class, 'debtorsMonthly'])->name('reports.debtorsMonthly');
 Route::middleware(['auth'])->get('reports/debtors-monthly/pdf', [\App\Http\Controllers\ReportController::class, 'debtorsMonthlyPdf'])->name('reports.debtorsMonthlyPdf');
+Route::middleware(['auth'])->get('reports/debtors-by-tower', [\App\Http\Controllers\ReportController::class, 'debtorsByTower'])->name('reports.debtorsByTower');
+Route::middleware(['auth'])->get('reports/debtors-by-tower/csv', [\App\Http\Controllers\ReportController::class, 'debtorsByTowerCsv'])->name('reports.debtorsByTowerCsv');
+Route::middleware(['auth'])->get('reports/debtors-by-tower/pdf', [\App\Http\Controllers\ReportController::class, 'debtorsByTowerPdf'])->name('reports.debtorsByTowerPdf');
 

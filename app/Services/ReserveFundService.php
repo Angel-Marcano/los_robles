@@ -35,65 +35,88 @@ class ReserveFundService
     }
 
     /**
-     * Acredita al fondo de la torre la porción de reserva cobrada cuando una factura
-     * se marca como pagada. El aporte se registra en la moneda realmente pagada
-     * (proporcional a lo cobrado en USD y VES). Fondos aislados por torre.
+     * Acredita a los fondos de reserva (torre y/o general) la porción de reserva cobrada
+     * cuando una factura se marca como pagada. El aporte se registra en la moneda realmente
+     * pagada (proporcional a lo cobrado en USD y VES). Fondos aislados por torre + un fondo
+     * general del condominio.
+     *
+     * @return ReserveFundMovement|null El último movimiento creado (o null si no hubo).
      */
     public function creditFromPaidInvoice(Invoice $invoice): ?ReserveFundMovement
     {
-        // Evitar doble crédito.
-        $already = ReserveFundMovement::where('invoice_id', $invoice->id)
-            ->where('source', 'invoice')
-            ->where('direction', 'income')
-            ->exists();
-        if ($already) { return null; }
-
         $reserveItems = $invoice->items()->where('is_reserve', true)->get();
         if ($reserveItems->isEmpty()) { return null; }
-
-        $reserveUsd = round((float) $reserveItems->sum('subtotal_usd'), 2);
-        $reserveVes = round((float) $reserveItems->sum('subtotal_ves'), 2);
-        if ($reserveUsd <= 0 && $reserveVes <= 0) { return null; }
-
-        $towerId = $invoice->tower_id ?? optional($invoice->apartment)->tower_id;
-        if (!$towerId) { return null; }
-        $tower = Tower::find($towerId);
-        if (!$tower) { return null; }
-        $fund = ReserveFund::forTower($tower);
-
-        // Reparto por moneda realmente pagada (proporcional a la fracción de reserva de la factura).
-        $invoiceUsdEq = (float) $invoice->dueUsdEquivalent();
-        $fraction = $invoiceUsdEq > 0 ? ($reserveUsd / $invoiceUsdEq) : 0;
 
         $approved = $invoice->paymentReports()->where('status', 'approved')->get();
         $paidUsd  = (float) $approved->sum('amount_usd');
         $paidVes  = (float) $approved->sum('amount_ves');
-
-        $creditUsd = round($paidUsd * $fraction, 2);
-        $creditVes = round($paidVes * $fraction, 2);
-
-        // Fallback: si no se pudo prorratear (datos incompletos), usar los montos nominales de la reserva.
-        if ($creditUsd <= 0 && $creditVes <= 0) {
-            $creditUsd = $reserveUsd;
-            $creditVes = 0;
-        }
-
         $rate = (float) ($invoice->paid_exchange_rate ?? $invoice->exchange_rate_used ?? 0);
         $aptCode = optional($invoice->apartment)->code;
-        $notes = 'Aporte de fondo de reserva por factura '.$invoice->number
-            .($aptCode ? ' (apto '.$aptCode.')' : '')
-            .'. Reserva facturada: '.number_format($reserveUsd, 2).' USD'
-            .($rate > 0 ? '. Tasa de pago: '.rtrim(rtrim(number_format($rate, 6, '.', ''), '0'), '.') : '')
-            .'.';
+        $invoiceUsdEq = (float) $invoice->dueUsdEquivalent();
 
-        return $this->registerMovement($fund, 'income', [
-            'source'        => 'invoice',
-            'invoice_id'    => $invoice->id,
-            'apartment_id'  => $invoice->apartment_id,
-            'amount_usd'    => $creditUsd,
-            'amount_ves'    => $creditVes,
-            'exchange_rate' => $rate > 0 ? $rate : null,
-            'notes'         => $notes,
-        ]);
+        $lastMovement = null;
+
+        // Separar por tipo de reserva
+        foreach (['tower', 'general'] as $type) {
+            $items = $reserveItems->where('reserve_type', $type);
+            if ($items->isEmpty()) { continue; }
+
+            // Evitar doble crédito por tipo
+            $already = ReserveFundMovement::where('invoice_id', $invoice->id)
+                ->where('source', 'invoice')
+                ->where('direction', 'income')
+                ->where('reserve_type', $type)
+                ->exists();
+            if ($already) { continue; }
+
+            $reserveUsd = round((float) $items->sum('subtotal_usd'), 2);
+            $reserveVes = round((float) $items->sum('subtotal_ves'), 2);
+            if ($reserveUsd <= 0 && $reserveVes <= 0) { continue; }
+
+            // Resolver el fondo destino
+            $fund = null;
+            if ($type === 'tower') {
+                $towerId = $invoice->tower_id ?? optional($invoice->apartment)->tower_id;
+                if (!$towerId) { continue; }
+                $tower = Tower::find($towerId);
+                if (!$tower) { continue; }
+                $fund = ReserveFund::forTower($tower);
+            } else { // general
+                $condo = app()->bound('currentCondominium') ? app('currentCondominium') : null;
+                if (!$condo) { continue; }
+                $fund = ReserveFund::forCondominium($condo);
+            }
+
+            // Reparto proporcional a lo pagado
+            $fraction = $invoiceUsdEq > 0 ? ($reserveUsd / $invoiceUsdEq) : 0;
+            $creditUsd = round($paidUsd * $fraction, 2);
+            $creditVes = round($paidVes * $fraction, 2);
+
+            // Fallback: montos nominales si no se pudo prorratear
+            if ($creditUsd <= 0 && $creditVes <= 0) {
+                $creditUsd = $reserveUsd;
+                $creditVes = 0;
+            }
+
+            $label = $type === 'general' ? 'general del condominio' : 'de torre';
+            $notes = 'Aporte de fondo de reserva '.$label.' por factura '.$invoice->number
+                .($aptCode ? ' (apto '.$aptCode.')' : '')
+                .'. Reserva facturada: '.number_format($reserveUsd, 2).' USD'
+                .($rate > 0 ? '. Tasa de pago: '.rtrim(rtrim(number_format($rate, 6, '.', ''), '0'), '.') : '')
+                .'.';
+
+            $lastMovement = $this->registerMovement($fund, 'income', [
+                'source'        => 'invoice',
+                'reserve_type'  => $type,
+                'invoice_id'    => $invoice->id,
+                'apartment_id'  => $invoice->apartment_id,
+                'amount_usd'    => $creditUsd,
+                'amount_ves'    => $creditVes,
+                'exchange_rate' => $rate > 0 ? $rate : null,
+                'notes'         => $notes,
+            ]);
+        }
+
+        return $lastMovement;
     }
 }

@@ -227,7 +227,7 @@
 							<td>{{ $it->apartment->code ?? ('#'.$it->apartment_id) }}</td>
 							<td>
 								@if($it->is_reserve)
-									<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><i class="bi bi-piggy-bank me-1"></i>Fondo de Reserva</span>
+									<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><i class="bi bi-piggy-bank me-1"></i>{{ $it->reserve_type === 'general' ? 'Reserva General' : 'Reserva Torre' }}</span>
 								@else
 									{{ $it->expenseItem->name ?? ('Item '.$it->expense_item_id) }}
 								@endif

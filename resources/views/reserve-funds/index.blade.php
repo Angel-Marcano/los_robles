@@ -2,9 +2,12 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center page-header">
 	<div>
-		<h1><i class="bi bi-piggy-bank me-2"></i>Fondo de Reserva por Torre</h1>
-		<p class="text-muted mb-0">Cada torre mantiene su propio fondo. Los aportes de los apartamentos de una torre no se mezclan con los de otra.</p>
+		<h1><i class="bi bi-piggy-bank me-2"></i>Fondos de Reserva</h1>
+		<p class="text-muted mb-0">Fondo general del condominio + un fondo aislado por torre. Los aportes se acreditan automáticamente al pagar facturas.</p>
 	</div>
+	@if(auth()->user() && (auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('condo_admin')))
+	<a href="{{ route('reserve-funds.config.edit') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-sliders me-1"></i>Configurar %</a>
+	@endif
 </div>
 
 @if(session('status'))
@@ -41,8 +44,21 @@
 			<tbody>
 				@forelse($funds as $f)
 				<tr>
-					<td class="fw-semibold">{{ optional($f->tower)->name ?? 'Torre #'.$f->tower_id }}</td>
-					<td class="text-end font-monospace">{{ number_format((float) optional($f->tower)->reserve_percent, 2) }}%</td>
+					<td class="fw-semibold">
+						@if($f->isGeneral())
+							<span class="badge bg-primary-subtle text-primary-emphasis me-1">General</span>
+							Fondo de Reserva General
+						@else
+							{{ optional($f->tower)->name ?? 'Torre #'.$f->tower_id }}
+						@endif
+					</td>
+					<td class="text-end font-monospace">
+						@if($f->isGeneral())
+							{{ number_format((float)($condominium->reserve_percent ?? 0), 2) }}%
+						@else
+							{{ number_format((float) optional($f->tower)->reserve_percent, 2) }}%
+						@endif
+					</td>
 					<td class="text-end font-monospace">{{ number_format($f->balance_usd, 2) }}</td>
 					<td class="text-end font-monospace">{{ number_format($f->balance_ves, 2) }}</td>
 					<td class="text-end">
@@ -55,7 +71,7 @@
 					<td colspan="5">
 						<div class="empty-state">
 							<i class="bi bi-piggy-bank"></i>
-							<p>No hay torres registradas</p>
+							<p>No hay fondos de reserva registrados</p>
 						</div>
 					</td>
 				</tr>

@@ -159,6 +159,26 @@
 				<input type="number" step="0.01" name="late_fee_value" class="form-control" value="0">
 			</div>
 		</div>
+		<div class="row">
+			<div class="col-md-6 mb-3">
+				<div class="form-check form-switch">
+					<input class="form-check-input" type="checkbox" role="switch" id="includeTowerReserve" name="include_tower_reserve" value="1" checked>
+					<label class="form-label" for="includeTowerReserve">
+						<i class="bi bi-piggy-bank me-1"></i>Incluir fondo de reserva de torre
+						<span class="text-muted small">(según el % de cada torre)</span>
+					</label>
+				</div>
+			</div>
+			<div class="col-md-6 mb-3">
+				<div class="form-check form-switch">
+					<input class="form-check-input" type="checkbox" role="switch" id="includeGeneralReserve" name="include_general_reserve" value="1" checked>
+					<label class="form-label" for="includeGeneralReserve">
+						<i class="bi bi-piggy-bank-fill me-1"></i>Incluir fondo de reserva general
+						<span class="text-muted small">({{ (float)(app()->bound('currentCondominium') ? app('currentCondominium')->reserve_percent : 0) }}% del condominio)</span>
+					</label>
+				</div>
+			</div>
+		</div>
 		<button class="btn btn-primary btn-action"><i class="bi bi-check-lg"></i> Guardar borrador</button>
 		</div>
 	</form>
@@ -203,6 +223,7 @@ function syncPeriod(){
 const activeRate = {{ (float)((isset($activeRate) && $activeRate) ? $activeRate->rate : 0) }};
 const aptData = @json($apartments->mapWithKeys(fn($a) => [$a->id => ['aliquot' => (float) $a->aliquot_percent, 'tower' => $a->tower_id]]));
 const towerReserve = @json($towers->mapWithKeys(fn($t) => [$t->id => (float) ($t->reserve_percent ?? 0)]));
+const generalReservePct = {{ (float)(app()->bound('currentCondominium') ? app('currentCondominium')->reserve_percent : 0) }};
 function round2(x){ return Math.round((Number(x) + Number.EPSILON) * 100) / 100; }
 const items = new Map();
 function parseDecimalValue(value){
@@ -333,15 +354,41 @@ function syncPayload(){
 		}
 	});
 	let reserveUsd = 0;
-	selectedApts.forEach(id => {
-		const pct = towerReserve[aptData[id]?.tower] || 0;
-		reserveUsd += round2(aptSub[id] * pct / 100);
-	});
-	reserveUsd = round2(reserveUsd);
+	const includeTower = document.getElementById('includeTowerReserve').checked;
+	const includeGeneral = document.getElementById('includeGeneralReserve').checked;
+	// Reserva de torre: % de la torre del apto sobre su subtotal de gastos comunes
+	if(includeTower){
+		selectedApts.forEach(id => {
+			const pct = towerReserve[aptData[id]?.tower] || 0;
+			aptSub[id] += round2(aptSub[id] * pct / 100); // acumula para el general
+			reserveUsd += round2(aptSub[id] * pct / 100) - (aptSub[id] - round2(aptSub[id] * pct / 100)); // diff
+		});
+	}
+	// Recalcular reserva de torre limpiamente
+	let towerReserveUsd = 0;
+	const aptSubWithTower = {};
+	selectedApts.forEach(id => { aptSubWithTower[id] = aptSub[id]; });
+	if(includeTower){
+		selectedApts.forEach(id => {
+			const pct = towerReserve[aptData[id]?.tower] || 0;
+			const r = round2(aptSub[id] * pct / 100);
+			aptSubWithTower[id] = round2(aptSub[id] + r);
+			towerReserveUsd += r;
+		});
+	}
+	// Reserva general: % del condominio sobre el total del apto (gastos + reserva torre)
+	let generalReserveUsd = 0;
+	if(includeGeneral && generalReservePct > 0){
+		selectedApts.forEach(id => {
+			generalReserveUsd += round2(aptSubWithTower[id] * generalReservePct / 100);
+		});
+	}
+	reserveUsd = round2(towerReserveUsd + generalReserveUsd);
 	const reserveRow = document.getElementById('reserveRow');
 	const grandTotalRow = document.getElementById('grandTotalRow');
 	if(reserveUsd > 0){
-		document.getElementById('estimatedReserve').innerText = reserveUsd.toFixed(2);
+		document.getElementById('estimatedReserve').innerText = reserveUsd.toFixed(2)
+			+ (includeTower && includeGeneral ? ' (torre ' + towerReserveUsd.toFixed(2) + ' + general ' + generalReserveUsd.toFixed(2) + ')' : '');
 		document.getElementById('estimatedGrandTotal').innerText = (total + reserveUsd).toFixed(2);
 		reserveRow.style.display = '';
 		grandTotalRow.style.display = '';
@@ -400,6 +447,8 @@ function filterExpenseOptions(){
 		updateCount();
 	});
 	document.querySelectorAll('.apt-check').forEach(cb => cb.addEventListener('change', updateCount));
+	document.getElementById('includeTowerReserve').addEventListener('change', updateCount);
+	document.getElementById('includeGeneralReserve').addEventListener('change', updateCount);
 	updateCount();
 	syncPayload();
 })();

@@ -26,6 +26,9 @@ class Kernel extends ConsoleKernel
     {
         // Recalcular morosidad y enviar recordatorios diariamente a las 08:00
         $schedule->command('invoices:notify-overdue')->dailyAt('08:00');
+
+        // Backup automático de BD master y tenant a las 00:00, retención 7 días
+        $schedule->command('db:backup --retention=7')->dailyAt('00:00');
     }
 
     /**

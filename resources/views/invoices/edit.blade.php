@@ -145,6 +145,26 @@
     </div>
 
     <input type="hidden" name="items_payload" id="items_payload">
+    <div class="row mt-3">
+      <div class="col-md-6 mb-3">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="includeTowerReserve" name="include_tower_reserve" value="1" checked>
+          <label class="form-label" for="includeTowerReserve">
+            <i class="bi bi-piggy-bank me-1"></i>Incluir fondo de reserva de torre
+            <span class="text-muted small">(según el % de cada torre)</span>
+          </label>
+        </div>
+      </div>
+      <div class="col-md-6 mb-3">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="includeGeneralReserve" name="include_general_reserve" value="1" checked>
+          <label class="form-label" for="includeGeneralReserve">
+            <i class="bi bi-piggy-bank-fill me-1"></i>Incluir fondo de reserva general
+            <span class="text-muted small">({{ (float)(app()->bound('currentCondominium') ? app('currentCondominium')->reserve_percent : 0) }}% del condominio)</span>
+          </label>
+        </div>
+      </div>
+    </div>
     <div class="mt-3 d-flex justify-content-end gap-2">
       <a class="btn btn-outline-secondary btn-action" href="{{ route('invoices.show',$invoice) }}"><i class="bi bi-x-lg"></i> Cancelar</a>
       <button type="submit" class="btn btn-primary btn-action" onclick="return beforeSubmit()"><i class="bi bi-check-lg"></i> Guardar cambios</button>

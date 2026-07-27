@@ -15,11 +15,13 @@ class BillingService {
      *  - apartmentIds: array<int>
      *  - lateFee: array{type?:string,scope?:string,value?:float}
      *  - towerId: ?int
+     *  - itemDetails: array (amount, quantity, distribution, amount_ves, apartment_ids)
+     *  - reserveOpts: array{include_tower?:bool, include_general?:bool}
      */
-    public function generateInvoice(string $period,array $expenseItemIds,array $apartmentIds,array $lateFee=[],?int $towerId=null, array $itemDetails=[]): Invoice {
+    public function generateInvoice(string $period,array $expenseItemIds,array $apartmentIds,array $lateFee=[],?int $towerId=null, array $itemDetails=[], array $reserveOpts=[]): Invoice {
     $rate = CurrencyRate::where('active',true)->orderByDesc('valid_from')->first();
     $rateValue = (float) ($rate->rate ?? 0);
-    return DB::transaction(function() use ($period,$expenseItemIds,$apartmentIds,$lateFee,$rateValue,$towerId,$itemDetails){
+    return DB::transaction(function() use ($period,$expenseItemIds,$apartmentIds,$lateFee,$rateValue,$towerId,$itemDetails,$reserveOpts){
             $dueDate = \Carbon\Carbon::createFromFormat('Y-m',$period)->endOfMonth();
             $invoice = Invoice::create([
                 'tower_id'          => $towerId,
@@ -35,7 +37,7 @@ class BillingService {
                 'total_ves'         => 0,
             ]);
 
-            $totals = $this->createItems($invoice, $expenseItemIds, $apartmentIds, $itemDetails, $rateValue);
+            $totals = $this->createItems($invoice, $expenseItemIds, $apartmentIds, $itemDetails, $rateValue, $reserveOpts);
 
             $invoice->update([
                 'total_usd' => $totals['usd'],
@@ -51,12 +53,12 @@ class BillingService {
      * Reconstruye los ítems de una factura en borrador y actualiza sus totales.
      * Misma matemática que generateInvoice (única fuente de verdad).
      */
-    public function regenerateInvoice(Invoice $invoice, string $period, array $expenseItemIds, array $apartmentIds, array $lateFee=[], ?int $towerId=null, array $itemDetails=[]): Invoice {
+    public function regenerateInvoice(Invoice $invoice, string $period, array $expenseItemIds, array $apartmentIds, array $lateFee=[], ?int $towerId=null, array $itemDetails=[], array $reserveOpts=[]): Invoice {
         $rate = CurrencyRate::where('active',true)->orderByDesc('valid_from')->first();
         $rateValue = (float) ($rate->rate ?? $invoice->exchange_rate_used ?? 0);
-        return DB::transaction(function() use ($invoice,$period,$expenseItemIds,$apartmentIds,$lateFee,$towerId,$itemDetails,$rateValue){
+        return DB::transaction(function() use ($invoice,$period,$expenseItemIds,$apartmentIds,$lateFee,$towerId,$itemDetails,$rateValue,$reserveOpts){
             $invoice->items()->delete();
-            $totals = $this->createItems($invoice, $expenseItemIds, $apartmentIds, $itemDetails, $rateValue);
+            $totals = $this->createItems($invoice, $expenseItemIds, $apartmentIds, $itemDetails, $rateValue, $reserveOpts);
             $invoice->update([
                 'tower_id'          => $towerId ?? $invoice->tower_id,
                 'period'            => $period,
@@ -82,7 +84,10 @@ class BillingService {
      *
      * @return array{usd: float, ves: float}
      */
-    protected function createItems(Invoice $invoice, array $expenseItemIds, array $apartmentIds, array $itemDetails, float $rateValue): array {
+    protected function createItems(Invoice $invoice, array $expenseItemIds, array $apartmentIds, array $itemDetails, float $rateValue, array $reserveOpts = []): array {
+        $includeTower   = $reserveOpts['include_tower']   ?? true;
+        $includeGeneral = $reserveOpts['include_general'] ?? true;
+
         $apartments   = Apartment::whereIn('id',$apartmentIds)->get();
         $expenseItems = ExpenseItem::whereIn('id',$expenseItemIds)->get();
         $totalUsd     = 0;
@@ -158,7 +163,7 @@ class BillingService {
 
         // Fondo de reserva por torre: cada apartamento aporta el % de su propia torre
         // sobre el subtotal de gastos comunes de su factura. Fondos aislados por torre.
-        if(!empty($aptTotals)){
+        if($includeTower && !empty($aptTotals)){
             $towerIds = collect($aptTotals)->pluck('tower_id')->filter()->unique()->values();
             $towers   = \App\Models\Tower::whereIn('id', $towerIds)->get()->keyBy('id');
             foreach($aptTotals as $aptId => $acc){
@@ -170,6 +175,9 @@ class BillingService {
                 if($reserveUsd <= 0 && $reserveVes <= 0){ continue; }
                 $totalUsd += $reserveUsd;
                 $totalVes += $reserveVes;
+                // Acumular la reserva de torre en el total del apto para el cálculo del general
+                $aptTotals[$aptId]['usd'] = ($aptTotals[$aptId]['usd'] ?? 0) + $reserveUsd;
+                $aptTotals[$aptId]['ves'] = ($aptTotals[$aptId]['ves'] ?? 0) + $reserveVes;
                 InvoiceItem::create([
                     'invoice_id'      => $invoice->id,
                     'apartment_id'    => $aptId,
@@ -179,9 +187,39 @@ class BillingService {
                     'quantity'        => 1,
                     'distributed'     => false,
                     'is_reserve'      => true,
+                    'reserve_type'    => 'tower',
                     'subtotal_usd'    => $reserveUsd,
                     'subtotal_ves'    => $reserveVes,
                 ]);
+            }
+        }
+
+        // Fondo de reserva general del condominio: % aplicado sobre el total de la
+        // factura del apartamento (gastos comunes + reserva de torre si la hubo).
+        if($includeGeneral && !empty($aptTotals)){
+            $condo = app()->bound('currentCondominium') ? app('currentCondominium') : null;
+            $generalPct = $condo ? (float) $condo->reserve_percent : 0;
+            if($generalPct > 0){
+                foreach($aptTotals as $aptId => $acc){
+                    $reserveUsd = round(($acc['usd'] ?? 0) * $generalPct / 100, 2);
+                    $reserveVes = round(($acc['ves'] ?? 0) * $generalPct / 100, 2);
+                    if($reserveUsd <= 0 && $reserveVes <= 0){ continue; }
+                    $totalUsd += $reserveUsd;
+                    $totalVes += $reserveVes;
+                    InvoiceItem::create([
+                        'invoice_id'      => $invoice->id,
+                        'apartment_id'    => $aptId,
+                        'expense_item_id' => null,
+                        'base_amount_usd' => $reserveUsd,
+                        'base_amount_ves' => $reserveVes,
+                        'quantity'        => 1,
+                        'distributed'     => false,
+                        'is_reserve'      => true,
+                        'reserve_type'    => 'general',
+                        'subtotal_usd'    => $reserveUsd,
+                        'subtotal_ves'    => $reserveVes,
+                    ]);
+                }
             }
         }
 

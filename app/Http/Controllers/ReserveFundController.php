@@ -18,11 +18,20 @@ class ReserveFundController extends Controller
             ReserveFund::forTower($tower);
         }
 
-        $funds = ReserveFund::with('tower')->get()->sortBy(fn($f) => optional($f->tower)->name)->values();
+        // Asegurar el fondo de reserva general del condominio.
+        $condominium = app()->bound('currentCondominium') ? app('currentCondominium') : null;
+        if ($condominium) {
+            ReserveFund::forCondominium($condominium);
+        }
+
+        // Ordenar: fondo general primero, luego por nombre de torre.
+        $funds = ReserveFund::with('tower')->get()->sortBy(function($f) {
+            return $f->isGeneral() ? '' : (string) optional($f->tower)->name;
+        })->values();
         $totalUsd = round((float) $funds->sum('balance_usd'), 2);
         $totalVes = round((float) $funds->sum('balance_ves'), 2);
 
-        return view('reserve-funds.index', compact('funds', 'totalUsd', 'totalVes'));
+        return view('reserve-funds.index', compact('funds', 'totalUsd', 'totalVes', 'condominium'));
     }
 
     public function show(ReserveFund $reserveFund)

@@ -37,6 +37,17 @@
 				</form>
 			</div>
 		</div>
+		<div class="text-center mt-3">
+			<nav class="nav justify-content-center gap-2 flex-wrap">
+				<a href="{{ route('legal.terms') }}" class="text-muted small">Términos</a>
+				<span class="text-muted">·</span>
+				<a href="{{ route('legal.privacy') }}" class="text-muted small">Privacidad</a>
+				<span class="text-muted">·</span>
+				<a href="{{ route('legal.security') }}" class="text-muted small">Seguridad</a>
+				<span class="text-muted">·</span>
+				<a href="{{ route('legal.cookies') }}" class="text-muted small">Cookies</a>
+			</nav>
+		</div>
 	</div>
 </div>
 @endsection

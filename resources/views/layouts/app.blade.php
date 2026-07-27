@@ -138,8 +138,13 @@
 				</li>
 				@if($isAdmin)
 				<li class="nav-item">
-					<a class="nav-link {{ Request::routeIs('reports.*') ? 'active' : '' }}" href="{{ route('reports.debtorsMonthly') }}">
-						<i class="bi bi-exclamation-triangle me-1"></i>Deudores
+				<a class="nav-link {{ Request::routeIs('reports.debtorsMonthly*') ? 'active' : '' }}" href="{{ route('reports.debtorsMonthly') }}">
+					<i class="bi bi-exclamation-triangle me-1"></i>Deudores
+				</a>
+			</li>
+			<li class="nav-item">
+				<a class="nav-link {{ Request::routeIs('reports.debtorsByTower*') ? 'active' : '' }}" href="{{ route('reports.debtorsByTower') }}">
+					<i class="bi bi-building-exclamation me-1"></i>Morosidad por Torre
 					</a>
 				</li>
 				<li class="nav-item">
@@ -157,6 +162,13 @@
 						<i class="bi bi-piggy-bank me-1"></i>Fondo de Reserva
 					</a>
 				</li>
+				@if(auth()->user() && (auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('condo_admin')))
+				<li class="nav-item">
+					<a class="nav-link {{ Request::routeIs('reserve-funds.config.*') ? 'active' : '' }}" href="{{ route('reserve-funds.config.edit') }}">
+						<i class="bi bi-sliders me-1"></i>Config. Reserva
+					</a>
+				</li>
+				@endif
 				<li class="nav-item">
 					<a class="nav-link {{ Request::routeIs('exchange.*') ? 'active' : '' }}" href="{{ route('exchange.create') }}">
 						<i class="bi bi-arrow-left-right me-1"></i>Cambio
@@ -186,6 +198,58 @@
 		@yield('content')
 	</div>
 </main>
+
+<footer class="border-top py-3 mt-auto">
+	<div class="container">
+		<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 text-muted small">
+			<span>&copy; {{ date('Y') }} {{ $appName ?? 'Los Robles' }}. Todos los derechos reservados.</span>
+			<nav class="nav gap-2">
+				<a class="nav-link p-0 text-muted" href="{{ route('legal.terms') }}">Términos</a>
+				<a class="nav-link p-0 text-muted" href="{{ route('legal.privacy') }}">Privacidad</a>
+				<a class="nav-link p-0 text-muted" href="{{ route('legal.security') }}">Seguridad</a>
+				<a class="nav-link p-0 text-muted" href="{{ route('legal.cookies') }}">Cookies</a>
+				<a class="nav-link p-0 text-muted" href="{{ route('legal.retention') }}">Retención</a>
+			</nav>
+		</div>
+	</div>
+</footer>
+
+{{-- Banner de cookies --}}
+<div id="cookieBanner" class="position-fixed bottom-0 start-0 end-0 p-3" style="display:none; z-index:1060;">
+	<div class="container">
+		<div class="card shadow">
+			<div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-2 p-3">
+				<div class="flex-grow-1 small">
+					<i class="bi bi-cookie me-1"></i>
+					Usamos cookies técnicas (necesarias) y analíticas (opcionales).
+					<a href="{{ route('legal.cookies') }}" class="text-decoration-none">Ver política de cookies</a>.
+				</div>
+				<div class="d-flex gap-2">
+					<button class="btn btn-sm btn-outline-secondary" id="rejectCookies">Solo técnicas</button>
+					<button class="btn btn-sm btn-primary" id="acceptCookies">Aceptar todas</button>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<script>
+(function(){
+	var banner = document.getElementById('cookieBanner');
+	if(!banner) return;
+	var pref = localStorage.getItem('lr-analytics');
+	if(pref === null){
+		banner.style.display = 'block';
+	}
+	document.getElementById('acceptCookies').addEventListener('click', function(){
+		localStorage.setItem('lr-analytics', '1');
+		banner.style.display = 'none';
+	});
+	document.getElementById('rejectCookies').addEventListener('click', function(){
+		localStorage.setItem('lr-analytics', '0');
+		banner.style.display = 'none';
+	});
+})();
+</script>
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -227,7 +291,9 @@
 	}, true);
 })();
 </script>
-@include('chatbot.widget')
+@php // Chat IA ocultado temporalmente - se ve mal. Reactivar cuando se mejore el diseño.
+   // @include('chatbot.widget')
+@endphp
 @stack('scripts')
 </body>
 </html>

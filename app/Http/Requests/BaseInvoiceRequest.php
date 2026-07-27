@@ -15,6 +15,8 @@ abstract class BaseInvoiceRequest extends FormRequest
             'late_fee_type'   => 'nullable|in:percent,fixed',
             'late_fee_scope'  => 'nullable|in:day,week,month',
             'late_fee_value'  => 'nullable|numeric|min:0',
+            'include_tower_reserve'   => 'nullable|boolean',
+            'include_general_reserve' => 'nullable|boolean',
         ];
     }
 
@@ -47,5 +49,14 @@ abstract class BaseInvoiceRequest extends FormRequest
     {
         $items = json_decode($this->input('items_payload', '[]'), true);
         return is_array($items) ? $items : [];
+    }
+
+    /** Opciones de fondos de reserva para esta factura. */
+    public function reserveOpts(): array
+    {
+        return [
+            'include_tower'   => (bool) $this->boolean('include_tower_reserve', true),
+            'include_general' => (bool) $this->boolean('include_general_reserve', true),
+        ];
     }
 }

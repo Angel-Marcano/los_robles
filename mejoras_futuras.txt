@@ -80,22 +80,39 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
     reset y creación de propietarios.
 [ ] Revisar cabeceras de seguridad en nginx (X-Frame-Options, CSP básica,
     HSTS si no está).
-[ ] Página de Política de Privacidad (ALTA):
+[x] Página de Política de Privacidad (ALTA):
     publicar qué datos se recolectan, finalidad, base legal, retención,
-    terceros/proveedores (correo, SMS), contacto y canal de ejercicio ARCO.
-[ ] Página de Seguridad de la Plataforma (ALTA):
+    terceros/proveedores (correo, SMS), contacto y canal de ejercicio ARCO. —
+    hecho 2026-07-26: vista legal/privacy.blade.php en ruta /privacidad
+    (legal.privacy); cubre datos recolectados, finalidad, base legal, retención,
+    terceros (correo, SMS, storage, IA), derechos ARCO y contacto.
+[x] Página de Seguridad de la Plataforma (ALTA):
     prácticas implementadas (2FA, cifrado en tránsito, backups, auditoría),
-    buenas prácticas para usuarios y canal para reporte responsable de fallos.
+    buenas prácticas para usuarios y canal para reporte responsable de fallos. —
+    hecho 2026-07-26: vista legal/security.blade.php en ruta /seguridad
+    (legal.security); documenta 2FA, cifrado, firma de facturas, auditoría,
+    rate limiting, sanitización PII, backups, buenas prácticas y canal de
+    reporte responsable.
 [x] Página de Términos y Condiciones de Uso (2026-07-16):
     responsabilidades, límites del servicio, uso aceptable y vigencia.
-[ ] Banner/aviso de cookies + página de cookies:
-    diferenciar cookies técnicas vs analíticas y su finalidad.
-[ ] Consentimiento y versionado legal:
-    guardar accepted_privacy_at, accepted_terms_at y versión aceptada.
+[x] Banner/aviso de cookies + página de cookies:
+    diferenciar cookies técnicas vs analíticas y su finalidad. — hecho 2026-07-26:
+    banner flotante en layout (aceptar todas / solo técnicas); página /cookies
+    (legal.cookies) con tabla de tipos, finalidad, duración y gestión del
+    consentimiento; preferencia en localStorage (lr-analytics).
+[x] Consentimiento y versionado legal:
+    guardar accepted_privacy_at, accepted_terms_at y versión aceptada. — hecho
+    2026-07-26: migración tenant add_legal_consent_to_users_table; campos en
+    User (accepted_privacy_at, accepted_terms_at, legal_version); middleware
+    RequireLegalConsent redirige a /legal/accept si falta; config app.legal_version
+    (env LEGAL_VERSION, default "1.0"); vista legal/accept.blade.php.
 [ ] Flujo de derechos de datos personales:
     solicitud de acceso/rectificación/eliminación/exportación de datos.
-[ ] Política de retención y borrado:
-    tiempos de conservación por tipo de dato (facturas, logs, adjuntos, auditoría).
+[x] Política de retención y borrado:
+    tiempos de conservación por tipo de dato (facturas, logs, adjuntos, auditoría). —
+    hecho 2026-07-26: página /retencion (legal.retention) documenta que los datos
+    financieros y de auditoría NO se borran automáticamente; el borrado requiere
+    acción manual del super_admin conforme a normativa fiscal.
 [x] PaymentReport con borrado lógico (soft delete) aplicado (2026-07-16):
     se agregó deleted_at en master y tenant; no se eliminan adjuntos físicamente.
 [ ] Endpoint/botón para regenerar link temporal on-demand:
@@ -124,7 +141,11 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
 [x] Histórico de tasas por pago (2026-07-16):
     payment_reports ahora guarda exchange_rate_used + exchange_rate_valid_from
     + currency_rate_id para trazabilidad de la tasa origen.
-[ ] Reporte de morosidad por torre/apartamento exportable (CSV/PDF).
+[x] Reporte de morosidad por torre/apartamento exportable (CSV/PDF). — hecho
+    2026-07-26: ReportController::debtorsByTower() + debtorsByTowerCsv() +
+    debtorsByTowerPdf(); vistas reports/debtors_by_tower.blade.php y
+    debtors_by_tower_pdf.blade.php; rutas reports.debtorsByTower*; nav
+    "Morosidad por Torre".
 [x] Números de factura con secuencia por condominio y lock (2026-07-16):
     invoices.correlative secuencial + generación transaccional con lockForUpdate
     y número INV-{period}-{correlative} para reducir colisiones por concurrencia.
@@ -202,12 +223,19 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
 [ ] Script de deploy en el VPS (deploy.sh): git pull + view:clear +
     optimize:clear + config:cache + restart php8.3-fpm, para no hacerlo
     a mano cada vez.
-[ ] Healthcheck real (ruta /up o /health que verifique BD master y tenant)
-    y monitoreo (UptimeRobot o similar).
-[ ] Endpoints legales públicos en footer/login:
-    /privacidad, /seguridad, /terminos, /cookies con enlaces visibles.
-[ ] Backups automáticos de master_condominios y condo_losrobles (mysqldump
-    + cron + retención). CRÍTICO tenerlo aunque es "operaciones".
+[x] Healthcheck real (ruta /up o /health que verifique BD master y tenant)
+    y monitoreo (UptimeRobot o similar). — hecho 2026-07-26:
+    GET /up verifica master + tenant (200/503 JSON). Pendiente: configurar
+    UptimeRobot o similar apuntando a /up.
+[x] Endpoints legales públicos en footer/login:
+    /privacidad, /seguridad, /terminos, /cookies con enlaces visibles. — hecho
+    2026-07-26: rutas /terminos, /privacidad, /seguridad, /cookies, /retencion;
+    footer con enlaces + login con enlaces legales.
+[x] Backups automáticos de master_condominios y condo_losrobles (mysqldump
+    + cron + retención). CRÍTICO tenerlo aunque es "operaciones". — hecho
+    2026-07-26: comando `db:backup` (mysqldump + gzip) programado a las 00:00
+    vía schedule, retención 7 días, guarda en storage/app/backups. Requiere
+    `mysqldump` en el PATH del servidor y cron para `php artisan schedule:run`.
 [ ] Rotación de logs de Laravel (daily driver) si no está configurada.
 [ ] Colas: verificar worker (queue:work) supervisado con systemd/supervisor
     para los mails de InvoiceCreatedMail; si no, usar sync conscientemente.
