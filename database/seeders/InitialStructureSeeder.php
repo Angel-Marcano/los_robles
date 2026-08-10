@@ -30,6 +30,8 @@ class InitialStructureSeeder extends Seeder
                 $apartment = Apartment::firstOrCreate([
                     'tower_id' => $tower->id,
                     'code'     => $code,
+                ], [
+                    'condominium_id' => $condo->id,
                 ]);
 
                 // Crear usuario propietario para cada apartamento

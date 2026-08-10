@@ -245,6 +245,11 @@
 		</div>
 	</div>
 
+	@include('partials.comments', [
+		'entity' => $invoice,
+		'storeRoute' => route('invoices.comments.store', $invoice),
+	])
+
 	@if(!$invoice->parent_id && ($invoice->children && $invoice->children->count()))
 	<div class="card mt-3" id="child-list">
 		<div class="card-header d-flex justify-content-between align-items-center">

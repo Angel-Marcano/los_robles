@@ -8,19 +8,15 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 
-class InvoiceReminderMail extends Mailable implements ShouldQueue
+class MonthlyPendingInvoiceReminderMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
     public Invoice $invoice;
-    public float $lateUsd;
-    public float $lateVes;
 
-    public function __construct(Invoice $invoice, float $lateUsd, float $lateVes)
+    public function __construct(Invoice $invoice)
     {
         $this->invoice = $invoice;
-        $this->lateUsd = $lateUsd;
-        $this->lateVes = $lateVes;
     }
 
     public function build()
@@ -29,12 +25,10 @@ class InvoiceReminderMail extends Mailable implements ShouldQueue
             ? app('currentCondominium')->name
             : config('app.name', 'Los Robles');
 
-        return $this->subject('Recordatorio de pago - Factura ' . $this->invoice->number . ' - ' . $condoName)
-            ->markdown('emails.invoices.reminder')
+        return $this->subject('Recordatorio de factura pendiente - ' . $this->invoice->period . ' - ' . $condoName)
+            ->markdown('emails.invoices.monthly_pending_reminder')
             ->with([
                 'invoice' => $this->invoice,
-                'lateUsd' => $this->lateUsd,
-                'lateVes' => $this->lateVes,
             ]);
     }
 }

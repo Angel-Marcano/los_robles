@@ -125,10 +125,24 @@ Route::middleware(['auth'])->get('reserve-funds/{reserveFund}',[\App\Http\Contro
 Route::middleware(['auth'])->get('reserve-funds/{reserveFund}/movements/create',[\App\Http\Controllers\ReserveFundController::class,'createMovement'])->name('reserve-funds.movements.create');
 Route::middleware(['auth'])->post('reserve-funds/{reserveFund}/movements',[\App\Http\Controllers\ReserveFundController::class,'storeMovement'])->name('reserve-funds.movements.store');
 // Password reset (sin auth)
-Route::get('password/forgot',[\App\Http\Controllers\PasswordResetController::class,'showForgot']);
-Route::post('password/forgot',[\App\Http\Controllers\PasswordResetController::class,'sendLink']);
-Route::get('password/reset/{token}',[\App\Http\Controllers\PasswordResetController::class,'showReset']);
-Route::post('password/reset',[\App\Http\Controllers\PasswordResetController::class,'performReset']);
+Route::get('password/forgot', [\App\Http\Controllers\PasswordResetController::class, 'showForgot'])
+    ->middleware(['guest'])
+    ->name('password.forgot');
+Route::post('password/forgot', [\App\Http\Controllers\PasswordResetController::class, 'sendLink'])
+    ->middleware(['guest', 'throttle:password-forgot'])
+    ->name('password.forgot.send');
+Route::get('password/reset/{token}', [\App\Http\Controllers\PasswordResetController::class, 'showReset'])
+    ->middleware(['guest'])
+    ->name('password.reset');
+Route::post('password/reset', [\App\Http\Controllers\PasswordResetController::class, 'performReset'])
+    ->middleware(['guest', 'throttle:password-reset'])
+    ->name('password.reset.update');
+
+// Comentarios privados en facturas y reportes de pago
+Route::middleware(['auth'])->post('invoices/{invoice}/comments', [\App\Http\Controllers\CommentController::class, 'storeInvoiceComment'])
+    ->name('invoices.comments.store');
+Route::middleware(['auth'])->post('payment-reports/{paymentReport}/comments', [\App\Http\Controllers\CommentController::class, 'storePaymentReportComment'])
+    ->name('payment-reports.comments.store');
 // Auditoría
 Route::middleware(['auth'])->get('audit-logs',[\App\Http\Controllers\AuditLogController::class,'index'])->name('audit.logs.index'); // export CSV via ?export=csv
 

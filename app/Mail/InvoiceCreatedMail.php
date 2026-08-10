@@ -20,13 +20,17 @@ class InvoiceCreatedMail extends Mailable {
 
 	public function build()
 	{
+		$condoName = app()->bound('currentCondominium')
+			? app('currentCondominium')->name
+			: config('app.name', 'Los Robles');
+
 		$html = view('invoices.pdf',[ 'invoice' => $this->invoice ])->render();
 		$dompdf = new Dompdf((new Options())->set('defaultFont','DejaVu Sans'));
 		$dompdf->loadHtml($html);
 		$dompdf->render();
 		$pdf = $dompdf->output();
-		return $this->subject('Nueva factura '.$this->invoice->period)
+		return $this->subject('Nueva factura ' . $this->invoice->period . ' - ' . $condoName)
 			->view('emails.invoice_created')
-			->attachData($pdf,'factura_'.$this->invoice->id.'.pdf');
+			->attachData($pdf,'factura_' . $this->invoice->id . '.pdf');
 	}
 }

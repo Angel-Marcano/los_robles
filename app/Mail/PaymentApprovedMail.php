@@ -3,24 +3,23 @@
 namespace App\Mail;
 
 use App\Models\Invoice;
+use App\Models\PaymentReport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 
-class InvoiceReminderMail extends Mailable implements ShouldQueue
+class PaymentApprovedMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
+    public PaymentReport $paymentReport;
     public Invoice $invoice;
-    public float $lateUsd;
-    public float $lateVes;
 
-    public function __construct(Invoice $invoice, float $lateUsd, float $lateVes)
+    public function __construct(PaymentReport $paymentReport, Invoice $invoice)
     {
+        $this->paymentReport = $paymentReport;
         $this->invoice = $invoice;
-        $this->lateUsd = $lateUsd;
-        $this->lateVes = $lateVes;
     }
 
     public function build()
@@ -29,12 +28,12 @@ class InvoiceReminderMail extends Mailable implements ShouldQueue
             ? app('currentCondominium')->name
             : config('app.name', 'Los Robles');
 
-        return $this->subject('Recordatorio de pago - Factura ' . $this->invoice->number . ' - ' . $condoName)
-            ->markdown('emails.invoices.reminder')
+        return $this->subject('Pago aprobado - Factura ' . $this->invoice->number . ' - ' . $condoName)
+            ->markdown('emails.payments.approved')
             ->with([
+                'paymentReport' => $this->paymentReport,
                 'invoice' => $this->invoice,
-                'lateUsd' => $this->lateUsd,
-                'lateVes' => $this->lateVes,
+                'remainingUsd' => $this->invoice->remainingUsdEquivalent(),
             ]);
     }
 }

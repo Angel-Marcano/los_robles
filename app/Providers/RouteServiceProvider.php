@@ -64,5 +64,15 @@ class RouteServiceProvider extends ServiceProvider
         RateLimiter::for('login', function (Request $request) {
             return Limit::perMinute(10)->by($request->ip());
         });
+
+        // Rate limiting para solicitudes de recuperación de contraseña.
+        RateLimiter::for('password-forgot', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
+
+        // Rate limiting para envíos del formulario de restablecimiento de contraseña.
+        RateLimiter::for('password-reset', function (Request $request) {
+            return Limit::perMinute(10)->by($request->ip());
+        });
     }
 }

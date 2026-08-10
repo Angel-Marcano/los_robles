@@ -56,6 +56,11 @@
 					</form>
 				</div>
 			@endif
+
+			@include('partials.comments', [
+				'entity' => $paymentReport,
+				'storeRoute' => route('payment-reports.comments.store', $paymentReport),
+			])
 		</div>
 	</div>
 @endsection

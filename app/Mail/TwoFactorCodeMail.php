@@ -20,7 +20,11 @@ class TwoFactorCodeMail extends Mailable
 
     public function build()
     {
-        return $this->subject('Tu código de verificación')
+        $condoName = app()->bound('currentCondominium')
+            ? app('currentCondominium')->name
+            : config('app.name', 'Los Robles');
+
+        return $this->subject('Tu código de verificación - ' . $condoName)
             ->view('emails.two_factor_code');
     }
 }

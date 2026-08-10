@@ -103,7 +103,12 @@ class Invoice extends Model
     public function reissuedTo(){return $this->belongsTo(Invoice::class,'reissued_to_invoice_id');}
     public function reissuedFrom(){return $this->belongsTo(Invoice::class,'reissued_from_invoice_id');}
 
-    public function paymentReports(){return $this->hasMany(PaymentReport::class);} 
+    public function paymentReports(){return $this->hasMany(PaymentReport::class);}
+
+    public function comments()
+    {
+        return $this->morphMany(Comment::class, 'commentable')->orderBy('created_at', 'asc');
+    }
 
     public function dueUsdEquivalent(): float
     {

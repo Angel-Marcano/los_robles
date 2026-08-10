@@ -1,12 +1,15 @@
 <?php
 namespace App\Http\Controllers;
 
+use App\Mail\PaymentApprovedMail;
 use App\Models\{Invoice, PaymentReport, CurrencyRate};
 use Illuminate\Http\Request;
 use App\Services\AuditService;
 use App\Services\PaymentAttachmentStorageService;
 use App\Services\ReserveFundService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class PaymentReportController extends Controller
 {
@@ -228,7 +231,43 @@ class PaymentReportController extends Controller
         });
 
         app(AuditService::class)->log('payment_report_approved', 'PaymentReport', $paymentReport->id, ['status' => 'approved']);
+
+        // Notificar al propietario del apartamento sobre el pago aprobado.
+        $this->sendPaymentApprovedNotification($paymentReport, $invoice);
+
         return redirect()->route('invoices.show', $invoice);
+    }
+
+    /**
+     * Envía correo de confirmación al propietario cuando un pago es aprobado.
+     */
+    protected function sendPaymentApprovedNotification(PaymentReport $paymentReport, Invoice $invoice): void
+    {
+        $ownerEmail = $invoice->owner_email;
+
+        if (!$ownerEmail) {
+            $ownership = \App\Models\Ownership::where('apartment_id', $invoice->apartment_id)
+                ->where('active', true)
+                ->where('role', 'owner')
+                ->with('user')
+                ->first();
+            $ownerEmail = optional($ownership->user)->email;
+        }
+
+        if (!$ownerEmail) {
+            return;
+        }
+
+        try {
+            Mail::to($ownerEmail)->queue(new PaymentApprovedMail($paymentReport, $invoice));
+        } catch (\Throwable $e) {
+            Log::error('Payment approved mail failed', [
+                'invoice_id' => $invoice->id,
+                'payment_report_id' => $paymentReport->id,
+                'email' => $ownerEmail,
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function reject(PaymentReport $paymentReport)

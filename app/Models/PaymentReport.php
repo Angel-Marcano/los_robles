@@ -22,6 +22,11 @@ class PaymentReport extends Model
 		return $this->belongsTo(CurrencyRate::class);
 	}
 
+	public function comments()
+	{
+		return $this->morphMany(Comment::class, 'commentable')->orderBy('created_at', 'asc');
+	}
+
 	public function statusLabel(): string
 	{
 		switch ($this->status) {

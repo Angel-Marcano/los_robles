@@ -24,7 +24,11 @@ class ChatbotHandoffMail extends Mailable implements ShouldQueue
 
     public function build()
     {
-        return $this->subject('Escalamiento a humano — Chatbot Los Robles')
+        $condoName = app()->bound('currentCondominium')
+            ? app('currentCondominium')->name
+            : config('app.name', 'Los Robles');
+
+        return $this->subject('Escalamiento a humano — Chatbot ' . $condoName)
             ->markdown('emails.chatbot.handoff')
             ->with([
                 'conversation' => $this->conversation,

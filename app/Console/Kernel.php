@@ -24,8 +24,11 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // Recalcular morosidad y enviar recordatorios diariamente a las 08:00
-        $schedule->command('invoices:notify-overdue')->dailyAt('08:00');
+        // Recalcular morosidad y enviar recordatorios semanalmente los lunes a las 08:00
+        $schedule->command('invoices:notify-overdue')->weeklyOn(1, '08:00');
+
+        // Recordatorio mensual de facturas pendientes el día 1 de cada mes a las 09:00
+        $schedule->command('invoices:notify-pending')->monthlyOn(1, '09:00');
 
         // Backup automático de BD master y tenant a las 00:00, retención 7 días
         $schedule->command('db:backup --retention=7')->dailyAt('00:00');
