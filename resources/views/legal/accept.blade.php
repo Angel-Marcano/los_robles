@@ -11,8 +11,8 @@
                     @csrf
 
                     @if($needsPrivacy)
-                    <div class="form-check mb-3 p-3 border rounded">
-                        <input class="form-check-input" type="checkbox" name="accept_privacy" id="acceptPrivacy" value="1" required>
+                    <div class="form-check mb-3 p-3 border rounded d-flex align-items-start gap-2">
+                        <input class="form-check-input mt-1" type="checkbox" name="accept_privacy" id="acceptPrivacy" value="1" required>
                         <label class="form-check-label" for="acceptPrivacy">
                             He leído y acepto la <a href="{{ route('legal.privacy') }}" target="_blank">Política de Privacidad</a>.
                         </label>
@@ -20,8 +20,8 @@
                     @endif
 
                     @if($needsTerms)
-                    <div class="form-check mb-3 p-3 border rounded">
-                        <input class="form-check-input" type="checkbox" name="accept_terms" id="acceptTerms" value="1" required>
+                    <div class="form-check mb-3 p-3 border rounded d-flex align-items-start gap-2">
+                        <input class="form-check-input mt-1" type="checkbox" name="accept_terms" id="acceptTerms" value="1" required>
                         <label class="form-check-label" for="acceptTerms">
                             He leído y acepto los <a href="{{ route('legal.terms') }}" target="_blank">Términos y Condiciones de Uso</a>.
                         </label>

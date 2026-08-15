@@ -13,18 +13,58 @@
 		/* ── Theme transition ── */
 		html { transition: background-color .25s ease, color .25s ease; }
 
-		/* ── Navbar ── */
-		.lr-navbar {
-			backdrop-filter: blur(10px);
-			-webkit-backdrop-filter: blur(10px);
-			border-bottom: 1px solid rgba(0,0,0,.08);
+		/* ── Layout shell ── */
+		.lr-shell { display: flex; min-height: 100vh; }
+		.lr-sidebar {
+			width: 260px; min-height: 100vh; position: sticky; top: 0; align-self: flex-start;
+			background: var(--bs-body-bg); border-right: 1px solid var(--bs-border-color);
+			display: flex; flex-direction: column; z-index: 1040; transition: transform .25s ease;
 		}
-		[data-bs-theme="dark"] .lr-navbar { border-bottom-color: rgba(255,255,255,.06); }
-		.lr-navbar .nav-link { font-size: .875rem; font-weight: 500; padding: .5rem .85rem !important; border-radius: .5rem; transition: background .2s, color .2s; }
-		.lr-navbar .nav-link:hover { background: rgba(var(--bs-primary-rgb),.1); }
-		.lr-navbar .nav-link.active { background: rgba(var(--bs-primary-rgb),.15); color: var(--bs-primary) !important; }
-		.navbar-brand { font-weight: 700; letter-spacing: -.5px; font-size: 1.15rem; }
-		.navbar-brand i { color: var(--bs-success); }
+		[data-bs-theme="dark"] .lr-sidebar { background: #1a1d21; border-right-color: rgba(255,255,255,.06); }
+		.lr-sidebar-brand {
+			padding: 1rem 1.25rem; display: flex; align-items: center; gap: .5rem;
+			font-weight: 700; font-size: 1.1rem; letter-spacing: -.5px; text-decoration: none; color: inherit;
+			border-bottom: 1px solid var(--bs-border-color); flex-shrink: 0;
+		}
+		.lr-sidebar-brand i { color: var(--bs-success); }
+		.lr-sidebar-nav { flex-grow: 1; overflow-y: auto; padding: .75rem 0; }
+		.lr-sidebar-section { margin-bottom: .25rem; }
+		.lr-sidebar-heading {
+			font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .8px;
+			color: var(--bs-secondary-color); padding: .75rem 1.25rem .25rem;
+		}
+		.lr-sidebar-link {
+			display: flex; align-items: center; gap: .6rem; padding: .5rem 1.25rem;
+			font-size: .85rem; font-weight: 500; color: var(--bs-body-color); text-decoration: none;
+			border-left: 3px solid transparent; transition: all .15s ease;
+		}
+		.lr-sidebar-link:hover { background: rgba(var(--bs-primary-rgb),.08); border-left-color: rgba(var(--bs-primary-rgb),.3); }
+		.lr-sidebar-link.active { background: rgba(var(--bs-primary-rgb),.12); border-left-color: var(--bs-primary); color: var(--bs-primary); font-weight: 600; }
+		.lr-sidebar-link i { font-size: 1rem; width: 1.25rem; text-align: center; flex-shrink: 0; }
+		.lr-sidebar-toggle {
+			display: flex; align-items: center; gap: .6rem; padding: .5rem 1.25rem; width: 100%;
+			font-size: .85rem; font-weight: 600; color: var(--bs-body-color); background: none; border: none;
+			border-left: 3px solid transparent; transition: all .15s ease; cursor: pointer;
+		}
+		.lr-sidebar-toggle:hover { background: rgba(var(--bs-primary-rgb),.08); }
+		.lr-sidebar-toggle i.bi-chevron { margin-left: auto; font-size: .75rem; transition: transform .2s ease; }
+		.lr-sidebar-toggle[aria-expanded="true"] i.bi-chevron { transform: rotate(90deg); }
+		.lr-sidebar-sub .lr-sidebar-link { padding-left: 2.6rem; font-size: .8rem; font-weight: 400; }
+		.lr-sidebar-footer {
+			padding: .75rem 1.25rem; border-top: 1px solid var(--bs-border-color); flex-shrink: 0;
+			display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+		}
+		.lr-main { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
+		.lr-topbar {
+			padding: .5rem 1.25rem; border-bottom: 1px solid var(--bs-border-color);
+			display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+			background: var(--bs-body-bg); position: sticky; top: 0; z-index: 1030;
+		}
+		[data-bs-theme="dark"] .lr-topbar { background: #1a1d21; }
+		.lr-sidebar-backdrop {
+			position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1035; display: none;
+		}
+		.lr-sidebar-backdrop.show { display: block; }
 
 		/* ── Cards ── */
 		.card { border: none; border-radius: .75rem; box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04); }
@@ -72,30 +112,167 @@
 
 		/* ── Print ── */
 		@media print {
-			.lr-navbar, .theme-toggle, .no-print { display: none !important; }
+			.lr-sidebar, .lr-topbar, .theme-toggle, .no-print { display: none !important; }
 			.card { box-shadow: none !important; border: 1px solid #dee2e6 !important; }
+		}
+
+		/* ── Mobile sidebar ── */
+		.lr-sidebar-mobile-btn { display: none; }
+		@media (max-width: 991.98px) {
+			.lr-sidebar {
+				position: fixed; left: 0; top: 0; bottom: 0; min-height: 100vh; transform: translateX(-100%);
+			}
+			.lr-sidebar.show { transform: translateX(0); }
+			.lr-sidebar-mobile-btn { display: inline-flex; }
 		}
 	</style>
 	@stack('styles')
 </head>
-<body>
+<body class="d-flex flex-column min-vh-100">
 @if (!Request::is('login'))
-<nav class="navbar navbar-expand-lg sticky-top bg-body lr-navbar">
-	<div class="container">
-		<a class="navbar-brand d-flex align-items-center gap-2" href="/">
+@php
+	$isAdmin = auth()->check() && (auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('condo_admin') || auth()->user()->hasRole('tower_admin'));
+	$isSuperAdmin = auth()->check() && auth()->user()->hasRole('super_admin');
+	$isCondoAdmin = auth()->check() && (auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('condo_admin'));
+@endphp
+
+<div class="lr-shell">
+	<!-- Sidebar -->
+	<aside class="lr-sidebar" id="lrSidebar">
+		<a class="lr-sidebar-brand" href="/">
 			<i class="bi bi-buildings"></i> {{ $appName ?? 'Los Robles' }}
 		</a>
-		<div class="d-flex align-items-center gap-2 order-lg-last">
-			<button class="theme-toggle" id="themeToggle" type="button" title="Cambiar tema">
-				<i class="bi bi-moon-fill" id="themeIcon"></i>
-			</button>
-			@auth
-			<div class="dropdown">
-				<button class="btn btn-sm btn-outline-secondary btn-action dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-					<i class="bi bi-person-circle"></i>
-					<span class="d-none d-md-inline">{{ auth()->user()->name }}</span>
+		<nav class="lr-sidebar-nav" id="lrSidebarNav">
+			@php
+				$activeSection = '';
+				if (Request::routeIs('invoices.*') || Request::routeIs('payments.*')) $activeSection = 'facturacion';
+				elseif (Request::routeIs('towers.*') || Request::routeIs('apartments.*') || Request::routeIs('ownerships.*')) $activeSection = 'estructura';
+				elseif (Request::routeIs('users.*')) $activeSection = 'estructura';
+				elseif (Request::routeIs('accounts.*') || Request::routeIs('exchange.*') || Request::routeIs('reserve-funds.*')) $activeSection = 'finanzas';
+				elseif (Request::routeIs('rates.*')) $activeSection = 'configuracion';
+				elseif (Request::routeIs('reports.*')) $activeSection = 'reportes';
+				elseif (Request::routeIs('audit-logs*') || Request::routeIs('chatbot.admin.*')) $activeSection = 'admin';
+			@endphp
+
+			<!-- Facturación -->
+			<div class="lr-sidebar-section">
+				<button class="lr-sidebar-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sec-facturacion" aria-expanded="{{ $activeSection === 'facturacion' ? 'true' : 'false' }}">
+					<i class="bi bi-file-earmark-text"></i> Facturación
+					<i class="bi bi-chevron-right bi-chevron"></i>
 				</button>
-				<ul class="dropdown-menu dropdown-menu-end">
+				<div class="collapse lr-sidebar-sub" id="sec-facturacion" data-bs-parent="#lrSidebarNav">
+					<a class="lr-sidebar-link {{ Request::routeIs('invoices.*') ? 'active' : '' }}" href="{{ route('invoices.index') }}">
+						<i class="bi bi-receipt"></i> Facturas
+					</a>
+					@if($isAdmin)
+					<a class="lr-sidebar-link {{ Request::routeIs('expense-items.*') ? 'active' : '' }}" href="{{ route('expense-items.index') }}">
+						<i class="bi bi-list-ul"></i> Elementos de cobro
+					</a>
+					@endif
+				</div>
+			</div>
+
+			@if($isAdmin)
+			<!-- Estructura -->
+			<div class="lr-sidebar-section">
+				<button class="lr-sidebar-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sec-estructura" aria-expanded="{{ $activeSection === 'estructura' ? 'true' : 'false' }}">
+					<i class="bi bi-building-gear"></i> Estructura
+					<i class="bi bi-chevron-right bi-chevron"></i>
+				</button>
+				<div class="collapse lr-sidebar-sub" id="sec-estructura" data-bs-parent="#lrSidebarNav">
+					<a class="lr-sidebar-link {{ Request::routeIs('towers.*') || Request::routeIs('apartments.*') ? 'active' : '' }}" href="{{ route('towers.index') }}">
+						<i class="bi bi-building"></i> Torres y Apartamentos
+					</a>
+					<a class="lr-sidebar-link {{ Request::routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}">
+						<i class="bi bi-people"></i> Usuarios
+					</a>
+				</div>
+			</div>
+
+			<!-- Finanzas -->
+			<div class="lr-sidebar-section">
+				<button class="lr-sidebar-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sec-finanzas" aria-expanded="{{ $activeSection === 'finanzas' ? 'true' : 'false' }}">
+					<i class="bi bi-cash-coin"></i> Finanzas
+					<i class="bi bi-chevron-right bi-chevron"></i>
+				</button>
+				<div class="collapse lr-sidebar-sub" id="sec-finanzas" data-bs-parent="#lrSidebarNav">
+					<a class="lr-sidebar-link {{ Request::routeIs('accounts.*') ? 'active' : '' }}" href="{{ route('accounts.index') }}">
+						<i class="bi bi-wallet2"></i> Cuentas
+					</a>
+					<a class="lr-sidebar-link {{ Request::routeIs('exchange.*') ? 'active' : '' }}" href="{{ route('exchange.create') }}">
+						<i class="bi bi-arrow-left-right"></i> Cambio de divisas
+					</a>
+					<a class="lr-sidebar-link {{ Request::routeIs('reserve-funds.*') && !Request::routeIs('reserve-funds.config.*') ? 'active' : '' }}" href="{{ route('reserve-funds.index') }}">
+						<i class="bi bi-piggy-bank"></i> Fondo de reserva
+					</a>
+					@if($isCondoAdmin)
+					<a class="lr-sidebar-link {{ Request::routeIs('reserve-funds.config.*') ? 'active' : '' }}" href="{{ route('reserve-funds.config.edit') }}">
+						<i class="bi bi-sliders"></i> Config. fondo reserva
+					</a>
+					@endif
+				</div>
+			</div>
+
+			<!-- Reportes -->
+			<div class="lr-sidebar-section">
+				<button class="lr-sidebar-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sec-reportes" aria-expanded="{{ $activeSection === 'reportes' ? 'true' : 'false' }}">
+					<i class="bi bi-bar-chart-line"></i> Reportes
+					<i class="bi bi-chevron-right bi-chevron"></i>
+				</button>
+				<div class="collapse lr-sidebar-sub" id="sec-reportes" data-bs-parent="#lrSidebarNav">
+					<a class="lr-sidebar-link {{ Request::routeIs('reports.debtorsMonthly*') ? 'active' : '' }}" href="{{ route('reports.debtorsMonthly') }}">
+						<i class="bi bi-exclamation-triangle"></i> Morosidad mensual
+					</a>
+					<a class="lr-sidebar-link {{ Request::routeIs('reports.debtorsByTower*') ? 'active' : '' }}" href="{{ route('reports.debtorsByTower') }}">
+						<i class="bi bi-building-exclamation"></i> Morosidad por torre
+					</a>
+				</div>
+			</div>
+
+			<!-- Configuración -->
+			<div class="lr-sidebar-section">
+				<button class="lr-sidebar-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sec-configuracion" aria-expanded="{{ $activeSection === 'configuracion' ? 'true' : 'false' }}">
+					<i class="bi bi-gear"></i> Configuración
+					<i class="bi bi-chevron-right bi-chevron"></i>
+				</button>
+				<div class="collapse lr-sidebar-sub" id="sec-configuracion" data-bs-parent="#lrSidebarNav">
+					<a class="lr-sidebar-link {{ Request::routeIs('rates.*') ? 'active' : '' }}" href="{{ route('rates.index') }}">
+						<i class="bi bi-currency-exchange"></i> Tasas de cambio
+					</a>
+					@if($isSuperAdmin)
+					<a class="lr-sidebar-link {{ Request::routeIs('condominiums.*') ? 'active' : '' }}" href="{{ route('condominiums.index') }}">
+						<i class="bi bi-buildings"></i> Condominios
+					</a>
+					@endif
+				</div>
+			</div>
+
+			<!-- Administración -->
+			@if($isCondoAdmin)
+			<div class="lr-sidebar-section">
+				<button class="lr-sidebar-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sec-admin" aria-expanded="{{ $activeSection === 'admin' ? 'true' : 'false' }}">
+					<i class="bi bi-shield-lock"></i> Administración
+					<i class="bi bi-chevron-right bi-chevron"></i>
+				</button>
+				<div class="collapse lr-sidebar-sub" id="sec-admin" data-bs-parent="#lrSidebarNav">
+					<a class="lr-sidebar-link {{ Request::routeIs('audit-logs*') ? 'active' : '' }}" href="{{ route('audit.logs.index') }}">
+						<i class="bi bi-clipboard-check"></i> Auditoría
+					</a>
+					<a class="lr-sidebar-link {{ Request::routeIs('chatbot.admin.*') ? 'active' : '' }}" href="{{ route('chatbot.admin.conversations') }}">
+						<i class="bi bi-chat-dots"></i> Conversaciones chatbot
+					</a>
+				</div>
+			</div>
+			@endif
+			@endif
+		</nav>
+		<div class="lr-sidebar-footer">
+			<div class="dropdown">
+				<button class="btn btn-sm btn-outline-secondary btn-action dropdown-toggle w-100" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+					<i class="bi bi-person-circle"></i>
+					<span class="text-truncate">{{ auth()->user()->name ?? '' }}</span>
+				</button>
+				<ul class="dropdown-menu dropdown-menu-start w-100">
 					<li><a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="bi bi-person-gear me-2"></i>Mi Perfil</a></li>
 					<li><hr class="dropdown-divider"></li>
 					<li>
@@ -106,113 +283,68 @@
 					</li>
 				</ul>
 			</div>
-			@endauth
+			<button class="theme-toggle" id="themeToggle" type="button" title="Cambiar tema">
+				<i class="bi bi-moon-fill" id="themeIcon"></i>
+			</button>
 		</div>
-		<button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-			<span class="navbar-toggler-icon"></span>
-		</button>
-		<div class="collapse navbar-collapse" id="navbarNav">
-			<ul class="navbar-nav me-auto gap-1">
-				@php $isAdmin = auth()->check() && (auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('condo_admin') || auth()->user()->hasRole('tower_admin')); @endphp
-				@if($isAdmin)
-				<li class="nav-item">
-					<a class="nav-link {{ Request::routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}">
-						<i class="bi bi-people me-1"></i>Usuarios
-					</a>
-				</li>
-				<li class="nav-item">
-					<a class="nav-link {{ Request::routeIs('towers.*') || Request::routeIs('towers.apartments.*') ? 'active' : '' }}" href="{{ route('towers.index') }}">
-						<i class="bi bi-building me-1"></i>Torres
-					</a>
-				</li>
-				<li class="nav-item">
-					<a class="nav-link {{ Request::routeIs('expense-items.*') ? 'active' : '' }}" href="{{ route('expense-items.index') }}">
-						<i class="bi bi-receipt me-1"></i>Gastos
-					</a>
-				</li>
-				@endif
-				<li class="nav-item">
-					<a class="nav-link {{ Request::routeIs('invoices.*') ? 'active' : '' }}" href="{{ route('invoices.index') }}">
-						<i class="bi bi-file-earmark-text me-1"></i>Facturas
-					</a>
-				</li>
-				@if($isAdmin)
-				<li class="nav-item">
-				<a class="nav-link {{ Request::routeIs('reports.debtorsMonthly*') ? 'active' : '' }}" href="{{ route('reports.debtorsMonthly') }}">
-					<i class="bi bi-exclamation-triangle me-1"></i>Deudores
-				</a>
-			</li>
-			<li class="nav-item">
-				<a class="nav-link {{ Request::routeIs('reports.debtorsByTower*') ? 'active' : '' }}" href="{{ route('reports.debtorsByTower') }}">
-					<i class="bi bi-building-exclamation me-1"></i>Morosidad por Torre
-					</a>
-				</li>
-				<li class="nav-item">
-					<a class="nav-link {{ Request::routeIs('rates.*') ? 'active' : '' }}" href="{{ route('rates.index') }}">
-						<i class="bi bi-currency-exchange me-1"></i>Tasas
-					</a>
-				</li>
-				<li class="nav-item">
-					<a class="nav-link {{ Request::routeIs('accounts.*') ? 'active' : '' }}" href="{{ route('accounts.index') }}">
-						<i class="bi bi-wallet2 me-1"></i>Cuentas
-					</a>
-				</li>
-				<li class="nav-item">
-					<a class="nav-link {{ Request::routeIs('reserve-funds.*') ? 'active' : '' }}" href="{{ route('reserve-funds.index') }}">
-						<i class="bi bi-piggy-bank me-1"></i>Fondo de Reserva
-					</a>
-				</li>
-				@if(auth()->user() && (auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('condo_admin')))
-				<li class="nav-item">
-					<a class="nav-link {{ Request::routeIs('reserve-funds.config.*') ? 'active' : '' }}" href="{{ route('reserve-funds.config.edit') }}">
-						<i class="bi bi-sliders me-1"></i>Config. Reserva
-					</a>
-				</li>
-				@endif
-				<li class="nav-item">
-					<a class="nav-link {{ Request::routeIs('exchange.*') ? 'active' : '' }}" href="{{ route('exchange.create') }}">
-						<i class="bi bi-arrow-left-right me-1"></i>Cambio
-					</a>
-				</li>
-				@endif
-			</ul>
-		</div>
-	</div>
-</nav>
-@endif
+	</aside>
+	<div class="lr-sidebar-backdrop" id="lrSidebarBackdrop"></div>
 
-<main class="py-4">
+	<!-- Main content -->
+	<div class="lr-main">
+		<header class="lr-topbar">
+			<button class="btn btn-sm btn-outline-secondary lr-sidebar-mobile-btn" id="lrSidebarToggle" type="button">
+				<i class="bi bi-list"></i>
+			</button>
+			<span class="text-muted small d-none d-md-block">{{ $appName ?? 'Los Robles' }} — Administración de Condominios</span>
+			<div class="ms-auto d-flex align-items-center gap-2">
+				<button class="theme-toggle d-md-none" id="themeToggleMobile" type="button" title="Cambiar tema">
+					<i class="bi bi-moon-fill" id="themeIconMobile"></i>
+				</button>
+			</div>
+		</header>
+
+		<main class="py-4 flex-grow-1">
+			<div class="container-fluid px-4">
+				@if(session('status'))
+					<div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="alert">
+						<i class="bi bi-check-circle-fill"></i>
+						<div>{{ session('status') }}</div>
+					</div>
+				@endif
+				@if($errors->any())
+					<div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+						<i class="bi bi-exclamation-circle-fill"></i>
+						<div>{{ $errors->first() }}</div>
+					</div>
+				@endif
+				@yield('content')
+			</div>
+		</main>
+
+		<footer class="border-top py-3 mt-auto">
+			<div class="container-fluid px-4">
+				<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 text-muted small">
+					<span>&copy; {{ date('Y') }} {{ $appName ?? 'Los Robles' }}. Todos los derechos reservados.</span>
+					<nav class="nav gap-2">
+						<a class="nav-link p-0 text-muted" href="{{ route('legal.terms') }}">Términos</a>
+						<a class="nav-link p-0 text-muted" href="{{ route('legal.privacy') }}">Privacidad</a>
+						<a class="nav-link p-0 text-muted" href="{{ route('legal.security') }}">Seguridad</a>
+						<a class="nav-link p-0 text-muted" href="{{ route('legal.cookies') }}">Cookies</a>
+						<a class="nav-link p-0 text-muted" href="{{ route('legal.retention') }}">Retención</a>
+					</nav>
+				</div>
+			</div>
+		</footer>
+	</div>
+</div>
+@else
+<main class="py-4 flex-grow-1">
 	<div class="container">
-		@if(session('status'))
-			<div class="alert alert-success d-flex align-items-center gap-2 mb-3" role="alert">
-				<i class="bi bi-check-circle-fill"></i>
-				<div>{{ session('status') }}</div>
-			</div>
-		@endif
-		@if($errors->any())
-			<div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
-				<i class="bi bi-exclamation-circle-fill"></i>
-				<div>{{ $errors->first() }}</div>
-			</div>
-		@endif
 		@yield('content')
 	</div>
 </main>
-
-<footer class="border-top py-3 mt-auto">
-	<div class="container">
-		<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 text-muted small">
-			<span>&copy; {{ date('Y') }} {{ $appName ?? 'Los Robles' }}. Todos los derechos reservados.</span>
-			<nav class="nav gap-2">
-				<a class="nav-link p-0 text-muted" href="{{ route('legal.terms') }}">Términos</a>
-				<a class="nav-link p-0 text-muted" href="{{ route('legal.privacy') }}">Privacidad</a>
-				<a class="nav-link p-0 text-muted" href="{{ route('legal.security') }}">Seguridad</a>
-				<a class="nav-link p-0 text-muted" href="{{ route('legal.cookies') }}">Cookies</a>
-				<a class="nav-link p-0 text-muted" href="{{ route('legal.retention') }}">Retención</a>
-			</nav>
-		</div>
-	</div>
-</footer>
+@endif
 
 {{-- Banner de cookies --}}
 <div id="cookieBanner" class="position-fixed bottom-0 start-0 end-0 p-3" style="display:none; z-index:1060;">
@@ -256,23 +388,41 @@
 <script>
 (function(){
 	const html = document.documentElement;
-	const toggle = document.getElementById('themeToggle');
-	const icon = document.getElementById('themeIcon');
 	const stored = localStorage.getItem('lr-theme');
 	if(stored) html.setAttribute('data-bs-theme', stored);
 	function updateIcon(){
 		const dark = html.getAttribute('data-bs-theme') === 'dark';
-		if(icon){
-			icon.className = dark ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
-		}
+		document.querySelectorAll('#themeIcon, #themeIconMobile').forEach(function(el){
+			if(el) el.className = dark ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+		});
 	}
 	updateIcon();
-	if(toggle){
+	document.querySelectorAll('#themeToggle, #themeToggleMobile').forEach(function(toggle){
+		if(!toggle) return;
 		toggle.addEventListener('click', function(){
 			const next = html.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark';
 			html.setAttribute('data-bs-theme', next);
 			localStorage.setItem('lr-theme', next);
 			updateIcon();
+		});
+	});
+})();
+</script>
+<script>
+/* Sidebar mobile toggle */
+(function(){
+	var sidebar = document.getElementById('lrSidebar');
+	var backdrop = document.getElementById('lrSidebarBackdrop');
+	var toggleBtn = document.getElementById('lrSidebarToggle');
+	if(!sidebar || !toggleBtn) return;
+	toggleBtn.addEventListener('click', function(){
+		sidebar.classList.toggle('show');
+		if(backdrop) backdrop.classList.toggle('show');
+	});
+	if(backdrop){
+		backdrop.addEventListener('click', function(){
+			sidebar.classList.remove('show');
+			backdrop.classList.remove('show');
 		});
 	}
 })();
