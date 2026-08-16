@@ -258,9 +258,11 @@
 					<a class="lr-sidebar-link {{ Request::routeIs('audit-logs*') ? 'active' : '' }}" href="{{ route('audit.logs.index') }}">
 						<i class="bi bi-clipboard-check"></i> Auditoría
 					</a>
+					{{-- Chatbot oculto por solicitud del usuario
 					<a class="lr-sidebar-link {{ Request::routeIs('chatbot.admin.*') ? 'active' : '' }}" href="{{ route('chatbot.admin.conversations') }}">
 						<i class="bi bi-chat-dots"></i> Conversaciones chatbot
 					</a>
+					--}}
 				</div>
 			</div>
 			@endif

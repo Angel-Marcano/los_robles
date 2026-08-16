@@ -2,6 +2,7 @@
 namespace App\Mail;
 
 use App\Models\Invoice;
+use App\Services\InvoiceVerificationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
@@ -24,7 +25,15 @@ class InvoiceCreatedMail extends Mailable {
 			? app('currentCondominium')->name
 			: config('app.name', 'Los Robles');
 
-		$html = view('invoices.pdf',[ 'invoice' => $this->invoice ])->render();
+		$verification = app(InvoiceVerificationService::class);
+		$verifyUrl    = $verification->verificationUrl($this->invoice);
+		$invoiceQrSvg = $verification->qrSvgForInvoice($this->invoice, 130);
+
+		$html = view('invoices.pdf', [
+			'invoice'      => $this->invoice,
+			'verifyUrl'    => $verifyUrl,
+			'invoiceQrSvg' => $invoiceQrSvg,
+		])->render();
 		$dompdf = new Dompdf((new Options())->set('defaultFont','DejaVu Sans'));
 		$dompdf->loadHtml($html);
 		$dompdf->render();

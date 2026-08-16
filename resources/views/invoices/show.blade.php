@@ -232,7 +232,7 @@
 									{{ $it->expenseItem->name ?? ('Item '.$it->expense_item_id) }}
 								@endif
 							</td>
-							<td>{{ $it->is_reserve ? 'Reserva' : ((($it->expenseItem->type ?? 'fixed') === 'aliquot') ? 'Alícuota' : 'Fijo') }}</td>
+							<td>{{ $it->is_reserve ? 'Reserva' : ($it->distributed ? 'Alícuota' : 'Fijo') }}</td>
 							<td class="text-end">{{ number_format($it->subtotal_usd,2) }}</td>
 							<td class="text-end">{{ number_format($it->subtotal_ves,2) }}</td>
 						</tr>

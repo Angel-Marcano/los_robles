@@ -71,8 +71,8 @@ Route::middleware(['auth'])->delete('profile/2fa', [\App\Http\Controllers\TwoFac
 // Users
 Route::middleware(['auth'])->resource('users', \App\Http\Controllers\UserController::class);
 Route::patch('users/{user}/toggle', [\App\Http\Controllers\UserController::class,'toggle'])->name('users.toggle');
-// Condominiums
-Route::middleware(['auth'])->resource('condominiums', \App\Http\Controllers\CondominiumController::class);
+// Condominiums — solo super_admin puede gestionar condominios
+Route::middleware(['auth','role:super_admin'])->resource('condominiums', \App\Http\Controllers\CondominiumController::class);
 // Torres y Apartamentos (tenant context)
 Route::middleware(['auth'])->resource('towers', \App\Http\Controllers\TowerController::class)->except(['show']);
 Route::middleware(['auth'])->resource('towers.apartments', \App\Http\Controllers\ApartmentController::class)->shallow()->except(['show']);
