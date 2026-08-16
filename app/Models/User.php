@@ -18,7 +18,7 @@ class User extends Authenticatable
      *
      * @var array<int, string>
      */
-    protected $fillable = [ 'name','first_name','last_name','document_type','document_number','email','password','active','accepted_privacy_at','accepted_terms_at','legal_version' ];
+    protected $fillable = [ 'name','first_name','last_name','document_type','document_number','phone','avatar','email','password','active','accepted_privacy_at','accepted_terms_at','legal_version' ];
 
     /**
      * The attributes that should be hidden for serialization.
@@ -47,6 +47,20 @@ class User extends Authenticatable
     ];
 
     public function scopeActive($q){ return $q->where('active',true); }
+
+    // ── Torres administradas (para tower_admin) ───────────────────────────
+
+    public function towers()
+    {
+        return $this->belongsToMany(\App\Models\Tower::class, 'tower_user');
+    }
+
+    // ── Apartamentos vinculados (propietario, copropietario o inquilino) ──
+
+    public function ownerships()
+    {
+        return $this->hasMany(\App\Models\Ownership::class);
+    }
 
     // ── Verificación en dos pasos ─────────────────────────────────────────
 

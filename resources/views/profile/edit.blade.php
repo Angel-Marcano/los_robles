@@ -20,6 +20,31 @@
 @endif
 
 <div class="row g-4">
+	{{-- Foto de perfil --}}
+	<div class="col-lg-6">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-person-circle me-1"></i>Foto de perfil</div>
+			<div class="card-body text-center">
+				@if($user->avatar)
+					<img src="{{ asset('storage/' . $user->avatar) }}" class="rounded-circle mb-3" style="width:120px;height:120px;object-fit:cover" alt="Avatar">
+				@else
+					<div class="rounded-circle bg-light d-inline-flex align-items-center justify-content-center mb-3" style="width:120px;height:120px">
+						<i class="bi bi-person-fill fs-1 text-muted"></i>
+					</div>
+				@endif
+				<form method="POST" action="{{ route('profile.update') }}" enctype="multipart/form-data">
+					@csrf @method('PATCH')
+					<div class="mb-3">
+						<label class="form-label">Cambiar foto</label>
+						<input type="file" name="avatar" class="form-control" accept="image/jpeg,image/png,image/webp">
+						<div class="form-text small">JPG, PNG o WebP. Máximo 2MB.</div>
+					</div>
+					<button class="btn btn-outline-primary btn-action"><i class="bi bi-upload"></i> Subir foto</button>
+				</form>
+			</div>
+		</div>
+	</div>
+
 	{{-- Datos personales --}}
 	<div class="col-lg-6">
 		<div class="card">
@@ -54,6 +79,11 @@
 							<label class="form-label">Número de documento</label>
 							<input type="text" name="document_number" class="form-control" value="{{ old('document_number', $user->document_number) }}" maxlength="40">
 						</div>
+					</div>
+					<div class="mb-3">
+						<label class="form-label"><i class="bi bi-telephone me-1"></i>Teléfono</label>
+						<input type="text" name="phone" class="form-control" value="{{ old('phone', $user->phone) }}" maxlength="30" placeholder="ej: +58 412 123 4567">
+						<div class="form-text small">Para notificaciones por SMS y WhatsApp.</div>
 					</div>
 					<div class="mb-3">
 						<label class="form-label">Correo electrónico</label>

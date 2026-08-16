@@ -13,7 +13,26 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', function () { return redirect()->route('login'); });
+Route::get('/', function () { return redirect()->route('dashboard'); });
+Route::middleware(['auth'])->get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
+// Notificaciones
+Route::middleware(['auth'])->get('/notifications', [\App\Http\Controllers\NotificationController::class, 'index'])->name('notifications.index');
+Route::middleware(['auth'])->patch('/notifications/{notification}/read', [\App\Http\Controllers\NotificationController::class, 'markRead'])->name('notifications.read');
+Route::middleware(['auth'])->post('/notifications/read-all', [\App\Http\Controllers\NotificationController::class, 'markAllRead'])->name('notifications.readAll');
+// Asambleas / Votaciones
+Route::middleware(['auth'])->prefix('assemblies')->group(function(){
+    Route::get('', [\App\Http\Controllers\AssemblyController::class, 'index'])->name('assemblies.index');
+    Route::get('create', [\App\Http\Controllers\AssemblyController::class, 'create'])->name('assemblies.create');
+    Route::post('', [\App\Http\Controllers\AssemblyController::class, 'store'])->name('assemblies.store');
+    Route::get('{assembly}', [\App\Http\Controllers\AssemblyController::class, 'show'])->name('assemblies.show');
+    Route::get('{assembly}/edit', [\App\Http\Controllers\AssemblyController::class, 'edit'])->name('assemblies.edit');
+    Route::patch('{assembly}', [\App\Http\Controllers\AssemblyController::class, 'update'])->name('assemblies.update');
+    Route::patch('{assembly}/open', [\App\Http\Controllers\AssemblyController::class, 'open'])->name('assemblies.open');
+    Route::patch('{assembly}/close', [\App\Http\Controllers\AssemblyController::class, 'close'])->name('assemblies.close');
+    Route::delete('{assembly}', [\App\Http\Controllers\AssemblyController::class, 'destroy'])->name('assemblies.destroy');
+    Route::post('{assembly}/vote', [\App\Http\Controllers\AssemblyController::class, 'vote'])->name('assemblies.vote');
+});
+Route::middleware(['auth'])->get('my/assemblies', [\App\Http\Controllers\AssemblyController::class, 'myAssemblies'])->name('assemblies.my');
 Route::view('/terminos', 'legal.terms')->name('legal.terms');
 Route::view('/privacidad', 'legal.privacy')->name('legal.privacy');
 Route::view('/seguridad', 'legal.security')->name('legal.security');
@@ -53,6 +72,8 @@ Route::middleware(['auth'])->prefix('invoices')->group(function(){
     Route::get('{invoice}/edit', [\App\Http\Controllers\InvoiceController::class,'edit'])->name('invoices.edit');
     Route::patch('{invoice}', [\App\Http\Controllers\InvoiceController::class,'update'])->name('invoices.update');
     Route::get('{invoice}/pdf', [\App\Http\Controllers\InvoiceController::class,'pdf'])->name('invoices.pdf');
+    Route::get('export/summary', [\App\Http\Controllers\InvoiceController::class,'exportSummary'])->name('invoices.export.summary');
+    Route::get('export/csv', [\App\Http\Controllers\InvoiceController::class,'exportCsv'])->name('invoices.export.csv');
     Route::patch('{invoice}/mark-paid', [\App\Http\Controllers\InvoiceController::class,'markPaid'])->name('invoices.markPaid');
     // Reportar pago de una factura específica
     Route::get('{invoice}/payments/create', [\App\Http\Controllers\PaymentReportController::class,'create'])->name('payments.create');

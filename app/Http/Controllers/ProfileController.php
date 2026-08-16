@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
@@ -23,8 +24,20 @@ class ProfileController extends Controller
             'last_name'       => 'nullable|string|max:120',
             'document_type'   => 'nullable|in:cedula,pasaporte',
             'document_number' => 'nullable|string|max:40',
+            'phone'           => 'nullable|string|max:30',
             'email'           => 'required|email|unique:tenant.users,email,' . $user->id,
+            'avatar'          => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ]);
+
+        // Manejar subida de avatar
+        if ($request->hasFile('avatar')) {
+            // Eliminar avatar anterior
+            if ($user->avatar) {
+                Storage::disk('public')->delete($user->avatar);
+            }
+            $path = $request->file('avatar')->store('avatars', 'public');
+            $data['avatar'] = $path;
+        }
 
         $user->update($data);
 

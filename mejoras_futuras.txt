@@ -248,6 +248,49 @@ Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
     + fallback automático a local/public cuando falten credenciales S3.
 [ ] Instalar/verificar adaptador S3 en producción (aws-sdk/flysystem-aws-s3-v3)
     y agregar checklist de smoke test post-deploy para carga/lectura de adjuntos.
+
+------------------------------------------------------------
+8. ASAMBLEAS Y VOTACIONES (MEDIA-ALTA)
+------------------------------------------------------------
+[x] Módulo completo de asambleas y votaciones electrónicas (2026-08-16):
+    - Convocatoria con alcance: torre específica, varias torres o condominio completo.
+    - Tipos de votación:
+      * Voto público (se ve quién votó y por qué opción)
+      * Voto oculto (se cuenta pero no se asocia al votante)
+    - Configuración de quórum y límite para que una opción sea válida:
+      * Quórum mínimo (ej: 50%+1 de los involucrados)
+      * Mayoría simple o calificada (2/3)
+      * Opción "sin límite" (solo informativa)
+    - Cierre por tiempo (fecha/hora límite) o manual por admin.
+    - Notificaciones automáticas:
+      * Notificación al convocar (a todos los involucrados vía NotificationService)
+      * Notificación de resultados al cerrar la votación
+      * Pendiente: recordatorio 1 día antes del cierre (requiere scheduled job)
+    - Interfaz de votación:
+      * Lista de asambleas/votaciones activas pendientes
+      * Opciones a votar (mínimo 2, dinámicas)
+      * Confirmación de voto emitido
+      * Resultados visibles después del cierre (o en tiempo real si es pública)
+    - Gestión desde admin:
+      * Crear convocatoria (título, descripción, alcance, tipo de voto,
+        opciones, fecha de cierre, quórum, peso)
+      * Ver participación en tiempo real (cuántos han votado, barra de progreso)
+      * Cerrar manualmente una votación
+      * Ver resultados con barras de progreso por opción
+    - Auditoría: registrar quién votó (incluso en ocultas, solo para
+      verificar que no vote dos veces, sin revelar la opción elegida).
+    - Roles que votan: owner y co_owner. tenant no vota.
+    - Peso: 1 voto por apartamento o por alícuota (configurable).
+    - Modelo de datos:
+      * assemblies (id, title, description, scope: tower|condo,
+        tower_ids json, vote_type: public|secret, quorum_type: none|simple|
+        qualified, quorum_value, weight_mode: equal|aliquot, closes_at,
+        status: draft|open|closed, created_by)
+      * assembly_options (id, assembly_id, label, sort_order)
+      * assembly_votes (id, assembly_id, user_id, option_id, voted_at,
+        weight) — unique(user_id, assembly_id)
+      * assembly_notifications (id, assembly_id, type: summon|reminder|
+        result, sent_at)
 [ ] Observabilidad de fallback storage:
     emitir métrica/log estructurado cuando el sistema caiga de S3 a local para detectar
     credenciales vencidas o errores de configuración.

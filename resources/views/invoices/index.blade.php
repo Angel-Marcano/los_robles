@@ -4,11 +4,21 @@
     <div>
         <h1><i class="bi bi-file-earmark-text me-2"></i>{{ $isAdmin ? 'Facturas' : 'Mis Facturas' }}</h1>
     </div>
-    @can('create', App\Models\Invoice::class)
-    <a href="{{ route('invoices.create') }}" class="btn btn-primary btn-action">
-        <i class="bi bi-plus-lg"></i> Nueva factura
-    </a>
-    @endcan
+    <div class="d-flex gap-2">
+        @if($isAdmin)
+            <a href="{{ route('invoices.export.summary', request()->query()) }}" class="btn btn-outline-danger btn-action" target="_blank">
+                <i class="bi bi-file-pdf"></i> Resumen PDF
+            </a>
+            <a href="{{ route('invoices.export.csv', request()->query()) }}" class="btn btn-outline-success btn-action">
+                <i class="bi bi-file-spreadsheet"></i> CSV
+            </a>
+        @endif
+        @can('create', App\Models\Invoice::class)
+        <a href="{{ route('invoices.create') }}" class="btn btn-primary btn-action">
+            <i class="bi bi-plus-lg"></i> Nueva factura
+        </a>
+        @endcan
+    </div>
 </div>
 
 <div class="card mb-4">

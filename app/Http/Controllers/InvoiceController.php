@@ -522,5 +522,91 @@ class InvoiceController extends Controller {
 
         return redirect()->route('invoices.show', $newInvoice)->with('status', 'Factura reemitida. La anterior fue anulada y enlazada a la nueva.');
     }
+
+    public function exportSummary(Request $request)
+    {
+        $this->authorize('viewAny', Invoice::class);
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(120);
+
+        $period = $request->get('period', now()->format('Y-m'));
+        $status = $request->get('status');
+        $towerId = $request->get('tower_id');
+
+        $q = Invoice::whereNotNull('parent_id')
+            ->whereNotIn('status', ['voided', 'reissued'])
+            ->with(['apartment.tower', 'tower']);
+        if ($period) { $q->where('period', $period); }
+        if ($status) { $q->where('status', $status); }
+        if ($towerId) { $q->where('tower_id', $towerId); }
+        $invoices = $q->orderBy('number')->get();
+
+        $html = view('invoices.summary_pdf', [
+            'invoices' => $invoices,
+            'period'   => $period,
+            'totalUsd' => $invoices->sum('total_usd'),
+            'totalVes' => $invoices->sum('total_ves'),
+            'totalPaid' => $invoices->where('status', 'paid')->sum('total_usd'),
+            'totalPending' => $invoices->where('status', 'pending')->sum('total_usd'),
+        ])->render();
+
+        $options = new Options();
+        $options->set('defaultFont', 'DejaVu Sans');
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', false);
+        $options->set('dpi', 96);
+        $dompdf = new Dompdf($options);
+        $dompdf->loadHtml($html);
+        $dompdf->setPaper('A4', 'portrait');
+        $dompdf->render();
+
+        return response($dompdf->output(), 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="resumen_facturas_' . $period . '.pdf"',
+        ]);
+    }
+
+    public function exportCsv(Request $request)
+    {
+        $this->authorize('viewAny', Invoice::class);
+        $period = $request->get('period', now()->format('Y-m'));
+        $status = $request->get('status');
+        $towerId = $request->get('tower_id');
+
+        $q = Invoice::whereNotNull('parent_id')
+            ->whereNotIn('status', ['voided', 'reissued'])
+            ->with(['apartment.tower']);
+        if ($period) { $q->where('period', $period); }
+        if ($status) { $q->where('status', $status); }
+        if ($towerId) { $q->where('tower_id', $towerId); }
+        $invoices = $q->orderBy('number')->get();
+
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="facturas_' . $period . '.csv"',
+        ];
+
+        $callback = function () use ($invoices) {
+            $f = fopen('php://output', 'w');
+            fprintf($f, chr(0xEF) . chr(0xBB) . chr(0xBF)); // BOM UTF-8
+            fputcsv($f, ['Factura', 'Período', 'Torre', 'Apartamento', 'Estado', 'Vence', 'Total USD', 'Total VES', 'Pagado USD']);
+            foreach ($invoices as $inv) {
+                fputcsv($f, [
+                    $inv->number,
+                    $inv->period,
+                    $inv->apartment?->tower?->name ?? '—',
+                    $inv->apartment?->code ?? '—',
+                    $inv->statusLabel(),
+                    $inv->due_date?->format('d/m/Y') ?? '—',
+                    $inv->total_usd,
+                    $inv->total_ves,
+                    $inv->status === 'paid' ? $inv->total_usd : 0,
+                ]);
+            }
+            fclose($f);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
 }
 

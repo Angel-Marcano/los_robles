@@ -8,13 +8,25 @@
 	<div class="table-responsive">
 		<table class="table table-hover align-middle mb-0">
 			<thead>
-				<tr><th>ID</th><th>Nombre</th><th>Activo</th><th></th></tr>
+				<tr><th>ID</th><th>Nombre</th><th>Subdominio</th><th>BD</th><th>Activo</th><th></th></tr>
 			</thead>
 			<tbody>
 				@forelse($items as $c)
 				<tr>
 					<td class="text-muted">{{$c->id}}</td>
 					<td><a href="{{route('condominiums.show',$c)}}" class="fw-semibold text-decoration-none">{{$c->name}}</a></td>
+					<td>
+						@if($c->subdomain)
+							@php
+								$isDomain = str_contains($c->subdomain, '.');
+								$url = $isDomain ? 'https://' . $c->subdomain : 'http://' . $c->subdomain . '.test';
+							@endphp
+							<a href="{{$url}}" target="_blank" class="text-decoration-none"><i class="bi bi-box-arrow-up-right"></i> {{$c->subdomain}}</a>
+						@else
+							<span class="text-danger small">No configurado</span>
+						@endif
+					</td>
+					<td><code>{{$c->db_name ?? '—'}}</code></td>
 					<td><span class="badge {{$c->active?'bg-success':'bg-secondary'}}">{{$c->active?'Sí':'No'}}</span></td>
 					<td class="text-end">
 						<a class="btn btn-sm btn-outline-primary btn-action" href="{{route('condominiums.edit',$c)}}"><i class="bi bi-pencil"></i> Editar</a>
@@ -22,7 +34,7 @@
 					</td>
 				</tr>
 				@empty
-				<tr><td colspan="4"><div class="empty-state"><i class="bi bi-buildings"></i><p>Sin condominios</p></div></td></tr>
+				<tr><td colspan="6"><div class="empty-state"><i class="bi bi-buildings"></i><p>Sin condominios</p></div></td></tr>
 				@endforelse
 			</tbody>
 		</table>

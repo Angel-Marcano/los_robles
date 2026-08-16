@@ -139,7 +139,7 @@
 <div class="lr-shell">
 	<!-- Sidebar -->
 	<aside class="lr-sidebar" id="lrSidebar">
-		<a class="lr-sidebar-brand" href="/">
+		<a class="lr-sidebar-brand" href="{{ route('dashboard') }}">
 			<i class="bi bi-buildings"></i> {{ $appName ?? 'Los Robles' }}
 		</a>
 		<nav class="lr-sidebar-nav" id="lrSidebarNav">
@@ -151,6 +151,7 @@
 				elseif (Request::routeIs('accounts.*') || Request::routeIs('exchange.*') || Request::routeIs('reserve-funds.*')) $activeSection = 'finanzas';
 				elseif (Request::routeIs('rates.*')) $activeSection = 'configuracion';
 				elseif (Request::routeIs('reports.*')) $activeSection = 'reportes';
+				elseif (Request::routeIs('assemblies.*')) $activeSection = 'asambleas';
 				elseif (Request::routeIs('audit-logs*') || Request::routeIs('chatbot.admin.*')) $activeSection = 'admin';
 			@endphp
 
@@ -229,6 +230,24 @@
 				</div>
 			</div>
 
+			<!-- Asambleas / Votaciones -->
+			<div class="lr-sidebar-section">
+				<button class="lr-sidebar-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sec-asambleas" aria-expanded="{{ $activeSection === 'asambleas' ? 'true' : 'false' }}">
+					<i class="bi bi-card-checklist"></i> Asambleas
+					<i class="bi bi-chevron-right bi-chevron"></i>
+				</button>
+				<div class="collapse lr-sidebar-sub" id="sec-asambleas" data-bs-parent="#lrSidebarNav">
+					@if($isAdmin)
+					<a class="lr-sidebar-link {{ Request::routeIs('assemblies.index') || Request::routeIs('assemblies.create') || Request::routeIs('assemblies.show') || Request::routeIs('assemblies.edit') ? 'active' : '' }}" href="{{ route('assemblies.index') }}">
+						<i class="bi bi-list-check"></i> Gestionar votaciones
+					</a>
+					@endif
+					<a class="lr-sidebar-link {{ Request::routeIs('assemblies.my') ? 'active' : '' }}" href="{{ route('assemblies.my') }}">
+						<i class="bi bi-hand-thumbs-up"></i> Mis votaciones
+					</a>
+				</div>
+			</div>
+
 			<!-- Configuración -->
 			<div class="lr-sidebar-section">
 				<button class="lr-sidebar-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#sec-configuracion" aria-expanded="{{ $activeSection === 'configuracion' ? 'true' : 'false' }}">
@@ -300,6 +319,45 @@
 			</button>
 			<span class="text-muted small d-none d-md-block">{{ $appName ?? 'Los Robles' }} — Administración de Condominios</span>
 			<div class="ms-auto d-flex align-items-center gap-2">
+				@php $unreadCount = \App\Models\Notification::where('user_id', auth()->id())->where('read', false)->count(); @endphp
+				<div class="dropdown">
+					<button class="btn btn-sm btn-outline-secondary position-relative" type="button" data-bs-toggle="dropdown" title="Notificaciones">
+						<i class="bi bi-bell"></i>
+						@if($unreadCount > 0)
+							<span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:0.6rem">{{ $unreadCount > 9 ? '9+' : $unreadCount }}</span>
+						@endif
+					</button>
+					<ul class="dropdown-menu dropdown-menu-end" style="min-width:320px;max-height:400px;overflow-y:auto">
+						<li class="px-3 py-2 d-flex justify-content-between align-items-center border-bottom">
+							<span class="fw-semibold small">Notificaciones</span>
+							@if($unreadCount > 0)
+								<form method="POST" action="{{ route('notifications.readAll') }}">@csrf
+									<button class="btn btn-sm btn-link p-0 text-decoration-none small">Marcar todas leídas</button>
+								</form>
+							@endif
+						</li>
+						@php $recentNotifs = \App\Models\Notification::where('user_id', auth()->id())->orderByDesc('created_at')->limit(8)->get(); @endphp
+						@foreach($recentNotifs as $n)
+							<li>
+								<a class="dropdown-item py-2 {{ $n->read ? '' : 'fw-semibold bg-light' }}" href="{{ $n->url ?: '#' }}">
+									<div class="d-flex gap-2">
+										<i class="bi {{ $n->iconClass() }} mt-1"></i>
+										<div class="flex-grow-1">
+											<div class="small">{{ $n->title }}</div>
+											@if($n->body)
+												<div class="text-muted" style="font-size:0.75rem">{{ $n->body }}</div>
+											@endif
+											<div class="text-muted" style="font-size:0.7rem">{{ $n->created_at->diffForHumans() }}</div>
+										</div>
+									</div>
+								</a>
+							</li>
+						@endforeach
+						<li class="border-top">
+							<a class="dropdown-item text-center small text-decoration-none" href="{{ route('notifications.index') }}">Ver todas</a>
+						</li>
+					</ul>
+				</div>
 				<button class="theme-toggle d-md-none" id="themeToggleMobile" type="button" title="Cambiar tema">
 					<i class="bi bi-moon-fill" id="themeIconMobile"></i>
 				</button>

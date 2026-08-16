@@ -17,6 +17,8 @@
 					<th>ID</th>
 					<th>Nombre</th>
 					<th>Email</th>
+					<th>Roles</th>
+					<th>Torres / Apartamentos</th>
 					<th>Estado</th>
 					<th class="text-end">Acciones</th>
 				</tr>
@@ -27,6 +29,29 @@
 					<td class="text-muted">{{ $u->id }}</td>
 					<td class="fw-semibold">{{ $u->name }}</td>
 					<td>{{ $u->email }}</td>
+					<td>
+						@foreach($u->roles as $role)
+							<span class="badge bg-primary-subtle text-primary-emphasis">{{ $role->name }}</span>
+						@endforeach
+						@if($u->roles->isEmpty())
+							<span class="text-muted small">Sin rol</span>
+						@endif
+					</td>
+					<td>
+						@if($u->towers->isNotEmpty())
+							@foreach($u->towers as $t)
+								<span class="badge bg-info-subtle text-info-emphasis"><i class="bi bi-building me-1"></i>{{ $t->name }}</span>
+							@endforeach
+						@endif
+						@if($u->ownerships->isNotEmpty())
+							@foreach($u->ownerships as $own)
+								<span class="badge bg-success-subtle text-success-emphasis"><i class="bi bi-door-open me-1"></i>{{ $own->apartment->code ?? '?' }}</span>
+							@endforeach
+						@endif
+						@if($u->towers->isEmpty() && $u->ownerships->isEmpty())
+							<span class="text-muted small">—</span>
+						@endif
+					</td>
 					<td>
 						@if($u->active)
 							<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Activo</span>
@@ -54,7 +79,7 @@
 				</tr>
 				@empty
 				<tr>
-					<td colspan="5">
+					<td colspan="7">
 						<div class="empty-state">
 							<i class="bi bi-people"></i>
 							<p>No hay usuarios registrados</p>

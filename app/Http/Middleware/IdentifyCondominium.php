@@ -14,9 +14,10 @@ class IdentifyCondominium
         $parts = explode('.', $host);
         $logical = $parts[0];
 
-        $condominium = Condominium::on('mysql')->where('subdomain', $logical)->first();
+        // Buscar por dominio completo primero (laspalmas.com), luego por subdominio (demo)
+        $condominium = Condominium::on('mysql')->where('subdomain', $host)->first();
         if (!$condominium) {
-            $condominium = Condominium::on('mysql')->where('subdomain', $host)->first();
+            $condominium = Condominium::on('mysql')->where('subdomain', $logical)->first();
         }
         if (!$condominium) {
             Log::warning('IdentifyCondominium no encontró condominio', ['host' => $host]);
