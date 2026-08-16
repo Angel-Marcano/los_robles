@@ -23,7 +23,7 @@ php artisan tenants:seed-roles / tenants:seed-admins [--password=]
 php artisan make:migration add_x_to_y --path=database/migrations/tenant   # tenant schema changes go here
 ```
 
-Docker: `Dockerfile` is a php:8.2-cli dev image (no compose, no DB) — run MySQL separately.
+Docker: `docker compose up` builds the php:8.2-cli dev image (`Dockerfile`, includes node/composer/mysqldump) and MySQL 8 (host port 3307, db `master_condominios`); `.env` points at `DB_HOST=mysql`. First run: `composer install`, `php artisan migrate`, `tenants:create`, `storage:link`.
 
 Tests use MySQL (sqlite lines in `phpunit.xml` are commented out) and there is no tenant bootstrap in `tests/TestCase.php`; several Feature tests still reference legacy `condominium_id` columns. Don't assume the suite is green before touching it.
 
