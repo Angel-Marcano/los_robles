@@ -3,6 +3,7 @@
 namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Illuminate\Http\JsonResponse;
 use Throwable;
 
 class Handler extends ExceptionHandler
@@ -59,7 +60,16 @@ class Handler extends ExceptionHandler
         return $response;
     }
     protected function shouldWrap($response): bool {
-        return !($response->headers->get('Content-Type') && str_contains($response->headers->get('Content-Type'),'application/json')) || ($response->getOriginal() && !isset($response->getOriginal()['error']));
+        $contentType = (string) $response->headers->get('Content-Type');
+        $isJson = $contentType !== '' && str_contains($contentType, 'application/json');
+        if (!$isJson) {
+            return true;
+        }
+        if ($response instanceof JsonResponse) {
+            $data = $response->getData(true);
+            return !isset($data['error']);
+        }
+        return true;
     }
     protected function mapExceptionToCode(Throwable $e,int $status): string {
         if(method_exists($e,'getStatusCode')){ $status=$e->getStatusCode(); }

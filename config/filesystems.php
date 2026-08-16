@@ -70,4 +70,10 @@ return [
         public_path('storage') => storage_path('app/public'),
     ],
 
+    'payment_attachments' => [
+        'disk' => env('PAYMENT_FILESYSTEM_DISK', env('FILESYSTEM_DRIVER', 'local') === 's3' ? 's3' : 'public'),
+        'fallback_disk' => env('PAYMENT_FILESYSTEM_FALLBACK_DISK', 'public'),
+        's3_temporary_url_ttl_minutes' => (int) env('PAYMENT_S3_URL_TTL_MINUTES', 20),
+    ],
+
 ];

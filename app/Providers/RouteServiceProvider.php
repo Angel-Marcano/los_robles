@@ -17,7 +17,7 @@ class RouteServiceProvider extends ServiceProvider
      *
      * @var string
      */
-    public const HOME = '/home';
+    public const HOME = '/invoices';
 
     /**
      * The controller namespace for the application.
@@ -58,6 +58,21 @@ class RouteServiceProvider extends ServiceProvider
     {
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(60)->by(optional($request->user())->id ?: $request->ip());
+        });
+
+        // Límite duro por IP para el login web (defensa adicional al throttle email+IP del controlador).
+        RateLimiter::for('login', function (Request $request) {
+            return Limit::perMinute(10)->by($request->ip());
+        });
+
+        // Rate limiting para solicitudes de recuperación de contraseña.
+        RateLimiter::for('password-forgot', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
+
+        // Rate limiting para envíos del formulario de restablecimiento de contraseña.
+        RateLimiter::for('password-reset', function (Request $request) {
+            return Limit::perMinute(10)->by($request->ip());
         });
     }
 }

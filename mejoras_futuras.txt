@@ -1,0 +1,629 @@
+MEJORAS FUTURAS — Los Robles
+============================================================
+Actualizado: 2026-08-09
+Leyenda: [ ] pendiente · [x] hecho · Prioridad: ALTA / MEDIA / BAJA
+
+------------------------------------------------------------
+1. TESTING (ALTA)
+------------------------------------------------------------
+[ ] Definir BD de test separada en phpunit.xml (descomentar env DB_* apuntando
+    a sqlite o a una BD "los_robles_test"). HOY: los tests viejos con
+    RefreshDatabase BORRAN la BD de desarrollo si se corre `php artisan test`
+    completo. Solo es seguro correr:
+    php artisan test --filter "InvoiceLateFeeTest|BillingServiceTest"
+[ ] Tests de policies (InvoicePolicy, PaymentReportPolicy, etc.):
+    que un owner no vea/edite facturas de otro apartamento.
+[ ] Tests de aislamiento multi-tenant: que un request con host de un condominio
+    no acceda a datos de otro (IdentifyCondominium + UsesTenantConnection).
+[ ] Tests de PaymentReport: aprobar/rechazar pago, cascada a factura padre,
+    movimientos de cuenta generados.
+[ ] Test del flujo approve(): generación de facturas hijas por apartamento,
+    numeración INV-{period}-{aptCode}, snapshot de owner, envío de mail en cola.
+[ ] Tests de integración SMS (EnviaTuSMS):
+    - fake del cliente HTTP para sendSms() y getBalance()
+    - assert de api_key en query string
+    - assert de manejo de timeout/errores 4xx/5xx.
+[ ] Tests de validación de QR de factura:
+    firma válida, firma alterada, factura anulada, factura de otro condominio.
+[x] Tests unitarios del storage de comprobantes (2026-07-16):
+    ruta por cliente/factura, fallback S3->local y resolución de links históricos.
+
+------------------------------------------------------------
+2. FRONTEND / VISTAS (MEDIA)
+------------------------------------------------------------
+[ ] Extraer el JS inline duplicado de invoices/create.blade.php y
+    invoices/edit.blade.php a un archivo compartido (public/js/invoice-form.js
+    o resources/js con mix). Hoy hay ~300 líneas duplicadas y ya se corrigió
+    un bug solo en create (parseDecimalValue, oninput sin re-render) que
+    habría que replicar/unificar en edit.
+[ ] Aplicar a edit.blade.php el mismo endurecimiento JS hecho en create:
+    - parseDecimalValue (coma decimal, Number.isFinite)
+    - inputs de monto con oninput y actualización directa (sin re-render,
+      evita perder el foco al escribir)
+    - eliminar variables temporales @php lejos de su uso (patrón que ya
+      causó errores 500 con vistas compiladas viejas en producción).
+[x] edit.blade.php: faltaba </div> de cierre en el bloque "Mora valor"
+    (col-md-3 sin cerrar antes del <hr>). Corregido 2026-07-06.
+[ ] Validación visual en el form (marcar en rojo montos inválidos antes
+    de enviar) en vez de depender solo del backend.
+[ ] Paginación/lazy-load en el selector de apartamentos si un condominio
+    crece (hoy se renderizan todos los checkboxes de golpe).
+
+------------------------------------------------------------
+3. MULTI-TENANCY / ARQUITECTURA (MEDIA)
+------------------------------------------------------------
+[ ] Limpiar la deriva de esquema master vs tenant: hay migraciones en
+    database/migrations (master) y database/migrations/tenant que tocan
+    tablas parecidas. Documentar cuál manda y eliminar duplicadas.
+    (No se tocó por riesgo: producción ya está migrada.)
+[ ] Quitar/bajar a debug los Log::info del trait UsesTenantConnection
+    (loguea por cada modelo instanciado; ensucia logs y cuesta I/O).
+[ ] Varias migraciones tenant usan Schema::connection('tenant') hardcodeado
+    en vez de la conexión del migrator; unificar al patrón sin connection()
+    para que `migrate --database=X` funcione siempre (afectó a los tests).
+[ ] Cachear la resolución host->condominium en IdentifyCondominium
+    (hoy consulta la BD master en cada request).
+[ ] Manejo explícito de requests por IP (sin host conocido): hoy devuelven
+    "condominio no encontrado"; considerar respuesta 404 limpia o redirect.
+
+------------------------------------------------------------
+4. SEGURIDAD (MEDIA — lo crítico ya se corrigió)
+------------------------------------------------------------
+[x] LoginController: logs sensibles y fallback manual eliminados.
+[x] Rutas /debug/session y /debug/auth eliminadas.
+[x] Contraseñas hardcodeadas (1234/12345678) reemplazadas por aleatorias.
+[x] Tokens Sanctum con expiración (30 días, env SANCTUM_TOKEN_EXPIRATION).
+[x] Rate limiting en el login web (throttle por IP+email) — hecho 2026-07-08:
+    5 intentos/min por email+IP en LoginController (RateLimiter manual) +
+    límite duro 10/min por IP (throttle:login) en la ruta POST.
+[ ] Política de contraseñas (mínimo 8+, Password::defaults()) en registro,
+    reset y creación de propietarios.
+[ ] Revisar cabeceras de seguridad en nginx (X-Frame-Options, CSP básica,
+    HSTS si no está).
+[x] Página de Política de Privacidad (ALTA):
+    publicar qué datos se recolectan, finalidad, base legal, retención,
+    terceros/proveedores (correo, SMS), contacto y canal de ejercicio ARCO. —
+    hecho 2026-07-26: vista legal/privacy.blade.php en ruta /privacidad
+    (legal.privacy); cubre datos recolectados, finalidad, base legal, retención,
+    terceros (correo, SMS, storage, IA), derechos ARCO y contacto.
+[x] Página de Seguridad de la Plataforma (ALTA):
+    prácticas implementadas (2FA, cifrado en tránsito, backups, auditoría),
+    buenas prácticas para usuarios y canal para reporte responsable de fallos. —
+    hecho 2026-07-26: vista legal/security.blade.php en ruta /seguridad
+    (legal.security); documenta 2FA, cifrado, firma de facturas, auditoría,
+    rate limiting, sanitización PII, backups, buenas prácticas y canal de
+    reporte responsable.
+[x] Página de Términos y Condiciones de Uso (2026-07-16):
+    responsabilidades, límites del servicio, uso aceptable y vigencia.
+[x] Banner/aviso de cookies + página de cookies:
+    diferenciar cookies técnicas vs analíticas y su finalidad. — hecho 2026-07-26:
+    banner flotante en layout (aceptar todas / solo técnicas); página /cookies
+    (legal.cookies) con tabla de tipos, finalidad, duración y gestión del
+    consentimiento; preferencia en localStorage (lr-analytics).
+[x] Consentimiento y versionado legal:
+    guardar accepted_privacy_at, accepted_terms_at y versión aceptada. — hecho
+    2026-07-26: migración tenant add_legal_consent_to_users_table; campos en
+    User (accepted_privacy_at, accepted_terms_at, legal_version); middleware
+    RequireLegalConsent redirige a /legal/accept si falta; config app.legal_version
+    (env LEGAL_VERSION, default "1.0"); vista legal/accept.blade.php.
+[ ] Flujo de derechos de datos personales:
+    solicitud de acceso/rectificación/eliminación/exportación de datos.
+[x] Política de retención y borrado:
+    tiempos de conservación por tipo de dato (facturas, logs, adjuntos, auditoría). —
+    hecho 2026-07-26: página /retencion (legal.retention) documenta que los datos
+    financieros y de auditoría NO se borran automáticamente; el borrado requiere
+    acción manual del super_admin conforme a normativa fiscal.
+[x] PaymentReport con borrado lógico (soft delete) aplicado (2026-07-16):
+    se agregó deleted_at en master y tenant; no se eliminan adjuntos físicamente.
+[ ] Endpoint/botón para regenerar link temporal on-demand:
+    hoy se regenera al recargar la vista de revisión; agregar acción explícita para admins.
+[ ] Checklist de alta de proveedor externo:
+    evaluar impacto de privacidad/seguridad antes de integrar nuevos servicios.
+[x] 2FA opcional para TODOS los usuarios (opt-in desde Mi Perfil, desactivado
+    por defecto) — hecho 2026-07-08. Métodos: código por correo (6 dígitos,
+    expira 10 min, un solo uso, envío síncrono) y app autenticadora TOTP
+    (pragmarx/google2fa + QR SVG). Desactivar requiere contraseña. Auditado.
+    Pendiente fase 2: códigos de recuperación y "recordar dispositivo";
+    un admin puede desactivar el 2FA de un usuario editando la BD si pierde
+    acceso (falta botón en gestión de Usuarios).
+
+------------------------------------------------------------
+5. FACTURACIÓN / DOMINIO (BAJA-MEDIA)
+------------------------------------------------------------
+[x] Job programado (schedule) para recalcular/notificar mora vencida y
+    enviar recordatorios de pago (2026-07-16):
+    comando invoices:notify-overdue, schedule dailyAt('08:00'), recalcula
+    late_fee_accrued_usd/ves, envía InvoiceReminderMail en cola y guarda
+    reminder_sent_at para evitar spam.
+[x] Anulación de facturas aprobadas (status voided) (2026-07-16):
+    InvoicePolicy::void(), InvoiceController::void(), campos voided_at,
+    void_reason, reissued_by; UI con modal de motivo.
+[x] Histórico de tasas por pago (2026-07-16):
+    payment_reports ahora guarda exchange_rate_used + exchange_rate_valid_from
+    + currency_rate_id para trazabilidad de la tasa origen.
+[x] Reporte de morosidad por torre/apartamento exportable (CSV/PDF). — hecho
+    2026-07-26: ReportController::debtorsByTower() + debtorsByTowerCsv() +
+    debtorsByTowerPdf(); vistas reports/debtors_by_tower.blade.php y
+    debtors_by_tower_pdf.blade.php; rutas reports.debtorsByTower*; nav
+    "Morosidad por Torre".
+[x] Números de factura con secuencia por condominio y lock (2026-07-16):
+    invoices.correlative secuencial + generación transaccional con lockForUpdate
+    y número INV-{period}-{correlative} para reducir colisiones por concurrencia.
+[x] QR antifalsificación por factura (ALTA) (2026-07-16):
+    - incluir QR en PDF/HTML con URL de verificación pública
+    - payload mínimo: invoice_id + tenant_id + hash firmado (HMAC)
+    - no exponer datos sensibles en texto plano dentro del QR.
+[x] Endpoint público de verificación de factura (ALTA) (2026-07-16):
+    GET /verify/invoice/{token} con respuesta clara: válida / anulada / no existe.
+[x] Firma criptográfica de factura (ALTA) (2026-07-16):
+    guardar invoice_signature y signed_at; invalidar firma si cambia monto,
+    estado o datos clave después de aprobada.
+[x] Flujo de reemisión segura (2026-07-16):
+    InvoicePolicy::reissue(), InvoiceController::reissue(), clona ítems en
+    borrador, anula original (voided), enlaza reissued_to/from_invoice_id,
+    genera nueva firma/QR; requiere aprobación del borrador para nuevo correlativo.
+[x] Short link para verificación en QR (2026-07-16):
+    GET /v/{token} apunta a VerifyInvoiceController::show; InvoiceVerificationService
+    genera URL corta en QR y PDF.
+
+------------------------------------------------------------
+6. INTEGRACIONES / COMUNICACIONES (MEDIA)
+------------------------------------------------------------
+[x] Base reusable de EnviaTuSMS creada (2026-07-13):
+    config services.enviatusms, env vars, EnviatuSmsService y tests feature.
+[ ] Integrar SMS en flujos de negocio (feature flags por evento):
+    - factura aprobada
+    - recordatorio de vencimiento
+    - confirmación de pago aprobado/rechazado.
+[ ] Cola para SMS (ALTA):
+    enviar por queue/job y no de forma síncrona en requests web.
+[ ] Plantillas SMS versionadas:
+    centralizar textos por tipo de evento con variables seguras.
+[ ] Opt-in / opt-out de SMS por usuario:
+    consentimiento explícito + auditoría de cambios + fecha de aceptación.
+[ ] Rate limit y anti-spam para SMS:
+    límite por usuario, apartamento y condominio (diario/mensual).
+[ ] Fallback de notificación:
+    si SMS falla, registrar motivo y enviar correo alterno cuando aplique.
+[ ] Integración futura con bot de WhatsApp (ALTA):
+    proveedor por definir (API oficial/meta o gateway), webhook de entrada,
+    plantillas aprobadas y envío transaccional por eventos del sistema.
+[x] Módulo de chatbot interno en el sistema (ALTA) (2026-07-17):
+    asistente web embebido, responde FAQs desde KB markdown, consulta saldo,
+    vencimientos y estado de pagos del usuario autenticado.
+[x] Chatbot con acciones controladas (ALTA) (2026-07-17):
+    reporte de pago asistido y creación de ticket de soporte con confirmación
+    inline, validación de ownership y auditoría en chatbot_conversations.
+[x] Capa de permisos por intención para bots (2026-07-17):
+    lectura con scopes de tenant/ownership; escritura requiere confirmación
+    explícita y validación de negocio.
+[x] Auditoría de conversaciones y acciones ejecutadas (2026-07-17):
+    tabla chatbot_conversations guarda input/output sanitizado, tools_called,
+    actions_executed, intent, model, duration_ms y pending_action.
+[x] Guardrails de seguridad para IA/chatbot (MEDIA) (2026-07-17):
+    bloqueo de jailbreak, solicitudes fuera de dominio y límite de operaciones
+    por sesión/usuario implementados en App\Services\Chatbot\Guardrails.
+[x] Fallback a humano / mesa de ayuda (2026-07-17):
+    HumanHandoffService detecta escalamiento, marca needs_human y notifica
+    por email; panel admin para ver conversaciones y marcar resueltas.
+[x] Base de conocimiento del chatbot versionada (2026-07-17):
+    archivos markdown en resources/chatbot/kb/ (general, billing, payments,
+    support); CRUD admin opcional para fase 3.
+[ ] Canal único de plantillas conversacionales:
+    unificar copy para WhatsApp, SMS y chatbot web con variables seguras.
+[ ] Métricas de calidad del bot:
+    tasa de resolución, derivaciones a humano, tiempo de respuesta y errores
+    de intención para mejora continua.
+
+------------------------------------------------------------
+7. OPERACIONES / DX (BAJA)
+------------------------------------------------------------
+[ ] Migrar phpunit.xml al esquema nuevo: vendor/bin/phpunit --migrate-configuration
+    (quita el WARN de "deprecated schema").
+[ ] Script de deploy en el VPS (deploy.sh): git pull + view:clear +
+    optimize:clear + config:cache + restart php8.3-fpm, para no hacerlo
+    a mano cada vez.
+[x] Healthcheck real (ruta /up o /health que verifique BD master y tenant)
+    y monitoreo (UptimeRobot o similar). — hecho 2026-07-26:
+    GET /up verifica master + tenant (200/503 JSON). Pendiente: configurar
+    UptimeRobot o similar apuntando a /up.
+[x] Endpoints legales públicos en footer/login:
+    /privacidad, /seguridad, /terminos, /cookies con enlaces visibles. — hecho
+    2026-07-26: rutas /terminos, /privacidad, /seguridad, /cookies, /retencion;
+    footer con enlaces + login con enlaces legales.
+[x] Backups automáticos de master_condominios y condo_losrobles (mysqldump
+    + cron + retención). CRÍTICO tenerlo aunque es "operaciones". — hecho
+    2026-07-26: comando `db:backup` (mysqldump + gzip) programado a las 00:00
+    vía schedule, retención 7 días, guarda en storage/app/backups. Requiere
+    `mysqldump` en el PATH del servidor y cron para `php artisan schedule:run`.
+[ ] Rotación de logs de Laravel (daily driver) si no está configurada.
+[ ] Colas: verificar worker (queue:work) supervisado con systemd/supervisor
+    para los mails de InvoiceCreatedMail; si no, usar sync conscientemente.
+[ ] Actualizar dependencias: Laravel 10 -> 11/12 cuando haya ventana
+    (10 sale de soporte de seguridad en 2025).
+[ ] Rotación/limpieza de comprobantes adjuntos:
+    política de retención, tamaño máximo por archivo y por reporte de pago.
+[x] Storage configurable local/S3 por entorno (2026-07-16):
+    PaymentAttachmentStorageService + config filesystems.payment_attachments
+    + fallback automático a local/public cuando falten credenciales S3.
+[ ] Instalar/verificar adaptador S3 en producción (aws-sdk/flysystem-aws-s3-v3)
+    y agregar checklist de smoke test post-deploy para carga/lectura de adjuntos.
+[ ] Observabilidad de fallback storage:
+    emitir métrica/log estructurado cuando el sistema caiga de S3 a local para detectar
+    credenciales vencidas o errores de configuración.
+
+------------------------------------------------------------
+8. TESTING COMPRENSIVO (ALTA — evaluado 2026-08-09)
+------------------------------------------------------------
+> Estado: VIABLE. Se estudiaron los 16 módulos de contextIA/, todos los
+> controladores, servicios, modelos, policies y tests existentes.
+> La lógica de negocio está encapsulada en servicios inyectables y la
+> documentación de contextIA sirve como especificación directa para los
+> tests. El patrón ya existe en BillingServiceTest (sqlite :memory: +
+> conexión tenant + seed base).
+
+PREREQUISITOS (bloqueadores — sin esto no se puede correr la suite completa):
+
+[ ] **BD de test separada en phpunit.xml** (CRÍTICO):
+    Descomentar DB_CONNECTION=sqlite + DB_DATABASE=:memory: en phpunit.xml.
+    HOY: RefreshDatabase BORRA la BD de desarrollo si se corre `php artisan test`.
+    Solo es seguro correr: php artisan test --filter "InvoiceLateFeeTest|BillingServiceTest"
+[ ] **Trait base para tests tenant** (TenantTestCase):
+    Configurar conexiones sqlite (default + tenant al mismo archivo :memory:),
+    vincular currentCondominium en el container, crear roles Spatie, sembrar
+    CurrencyRate activa. Reutilizable en todos los tests feature/unit tenant.
+[ ] **Factories faltantes** — solo existen 7 (Account, Apartment, AuditLog,
+    Condominium, Invoice, Tower, User). Crear:
+    - PaymentReportFactory (invoice_id, amount_usd/ves, exchange_rate_used, status)
+    - CurrencyRateFactory (rate, active, valid_from)
+    - ExpenseItemFactory (name, type, active)
+    - OwnershipFactory (apartment_id, user_id, role, active)
+    - ReserveFundFactory (tower_id, balance_usd/ves)
+    - ReserveFundMovementFactory (reserve_fund_id, direction, source, amount_usd/ves)
+    - AccountMovementFactory (account_id, type, amount_usd/ves)
+    - SupportTicketFactory (user_id, category, priority, status)
+    - ChatbotConversationFactory (user_id, session_id, intent, input/output)
+    - CommentFactory (commentable_type/id, user_id, message, is_internal)
+
+TESTS POR MÓDULO (con verificación de montos y datos esperados):
+
+--- 8.1 Facturación / BillingService (ALTA) ---
+[ ] Test: distribución alícuota con N apartamentos y alícuotas que no suman 100%:
+    verificar que el reparto es proporcional y la suma de subtotales = monto total.
+[ ] Test: distribución equal con quantity > 1: cada apto paga monto × cantidad.
+[ ] Test: pool VES conservado (no se recalcula USD × tasa cuando hay amount_ves).
+[ ] Test: fondo de reserva por torre (% configurable): verifica item is_reserve=true,
+    reserve_type='tower', monto = subtotal_gastos × pct/100.
+[ ] Test: fondo de reserva general (% del condominio sobre total apto + reserva torre).
+[ ] Test: toggles include_tower/include_general en false → no se agregan items de reserva.
+[ ] Test: regenerateInvoice reemplaza items y conserva monto base sin deriva.
+[ ] Test: factura con 0 items → borrador vacío con total 0.
+[ ] Test: caso extenso — 3 torres × 20 aptos, 5 gastos mixtos, reserva tower+general:
+    verificar totales USD/VES, conteo de items, redondeo a 2 decimales.
+
+--- 8.2 Aprobación y sub-facturas (ALTA) ---
+[ ] Test: approve() genera N sub-facturas (una por apartamento con items).
+[ ] Test: numeración correlativa INV-{period}-{correlative:06d} secuencial.
+[ ] Test: snapshot de owner (name, email, document) se copia a la sub-factura.
+[ ] Test: approve() marca padre como pending.
+[ ] Test: approve() sin items → error.
+[ ] Test: approve() sobre factura no draft → error.
+[ ] Test: firma HMAC generada al aprobar (ensureSignature).
+[ ] Test: InvoiceCreatedMail se encola para cada owner.
+[ ] Test: caso extenso — 60 apartamentos: 60 sub-facturas con totales correctos.
+
+--- 8.3 Mora / Late Fee (ALTA) ---
+[x] Tests unitarios de mora (2026-07-16): day/week/month, percent/fixed,
+    congelada al pagar, antes del vencimiento = 0.
+[ ] Test: mora con tasa activa → computeLateFeeVes usa exchange_rate_used.
+[ ] Test: mora con late_fee_value=0 → 0.
+[ ] Test: mora después de 365 días con scope=month → 12 periodos.
+
+--- 8.4 Cobros / PaymentReport (ALTA) ---
+[ ] Test: store() valida que al menos un monto > 0 (USD o VES).
+[ ] Test: store() valida que VES requiere tasa activa.
+[ ] Test: store() valida no exceder saldo pendiente (dueUsd - approved - reported).
+[ ] Test: store() sobre factura padre con hijas → error.
+[ ] Test: store() sobre factura draft/paid/voided → error.
+[ ] Test: approve() marca paid si approvedUsdEq >= dueUsd.
+[ ] Test: approve() no excede saldo (dueUsd - approved).
+[ ] Test: approve() sobre factura ya paid → error.
+[ ] Test: approve() con VES pero sin exchange_rate_used → error.
+[ ] Test: approve() dispara creditFromPaidInvoice (fondo de reserva).
+[ ] Test: approve() de última sub-factura → marca padre paid automáticamente.
+[ ] Test: reject() marca status=rejected.
+[ ] Test: caso extenso — 3 abonos parciales (USD+VES mixto) que suman el total:
+    verificar usd_equivalent de cada uno, saldo restante, marca paid al final.
+[ ] Test: usdEquivalent() usa usd_equivalent si no es null; si no, calcula.
+
+--- 8.5 Cuentas y Movimientos (MEDIA) ---
+[ ] Test: deposit incrementa saldo USD y/o VES.
+[ ] Test: withdraw valida fondos insuficientes (abort 422).
+[ ] Test: transfer crea dos movimientos espejo (transfer_out + transfer_in).
+[ ] Test: transfer valida from_id ≠ to_id.
+[ ] Test: transfer valida fondos en origen.
+[ ] Test: exchange usd_to_ves: ves = usd × rate, decrementa USD origen, incrementa VES destino.
+[ ] Test: exchange ves_to_usd: usd = ves / rate.
+[ ] Test: exchange valida fondos en moneda origen.
+[ ] Test: caso extenso — 5 transferencias + 2 exchanges: saldo final cuadra.
+
+--- 8.6 Fondo de Reserva (MEDIA) ---
+[ ] Test: forTower() crea fondo aislado por torre (uno por torre).
+[ ] Test: forCondominium() crea fondo general (tower_id=null).
+[ ] Test: creditFromPaidInvoice separa items por reserve_type (tower/general).
+[ ] Test: creditFromPaidInvoice reparte proporcional a lo pagado (no a lo facturado).
+[ ] Test: anti-doble crédito (no crea dos income para misma factura + reserve_type).
+[ ] Test: registerMovement income suma, expense resta.
+[ ] Test: expense valida fondos suficientes (tolerancia 0.005).
+[ ] Test: config update guarda % general + % por torre y audita cambios.
+[ ] Test: caso extenso — factura con reserva tower+general, pago parcial del 50%:
+    aporte al fondo = 50% de la reserva facturada (proporcional a lo pagado).
+
+--- 8.7 Moneda / CurrencyRate (MEDIA) ---
+[ ] Test: setRate desactiva todas las tasas activas anteriores.
+[ ] Test: setRate crea nueva tasa con active=true.
+[ ] Test: currentRate retorna la activa más reciente.
+[ ] Test: solo puede haber una tasa active=true a la vez.
+
+--- 8.8 Verificación de Factura / QR / Firma (ALTA) ---
+[x] Tests de QR (2026-07-16): token válido, firma alterada, factura anulada,
+    factura de otro condominio, endpoint público.
+[ ] Test: ensureSignature no firma si status=draft.
+[ ] Test: ensureSignature no re-firma si ya tiene firma.
+[ ] Test: computeInvoiceSignature cambia si cambia total_usd.
+[ ] Test: computeInvoiceSignature cambia si cambia owner_name.
+[ ] Test: verifyToken con token malformado → no-existe.
+[ ] Test: verifyToken con factura soft-deleted → anulada.
+
+--- 8.9 Policies (ALTA) ---
+[ ] Test: InvoicePolicy.view — owner ve solo sus sub-facturas (no padre).
+[ ] Test: InvoicePolicy.view — admin ve todo.
+[ ] Test: InvoicePolicy.update — solo draft; admin o created_by.
+[ ] Test: InvoicePolicy.void — solo admins sobre pending/paid.
+[ ] Test: InvoicePolicy.reissue — solo admins, no si voided_at.
+[ ] Test: PaymentReportPolicy.approve — super_admin siempre; tower_admin solo su torre.
+[ ] Test: PaymentReportPolicy.create — owners + tenants pueden crear.
+[ ] Test: ExpenseItemPolicy — solo super_admin.
+[ ] Test: OwnershipPolicy — solo admins.
+[ ] Test: ReserveFundPolicy.viewAny — admins; manage — super_admin + condo_admin.
+[ ] Test: CommentPolicy.comment — admin siempre; owner solo si es su factura.
+[ ] Test: ChatbotConversationPolicy — solo isAdmin.
+
+--- 8.10 Multi-tenancy / Aislamiento (ALTA) ---
+[ ] Test: request con host de condominio A no accede a datos de condominio B.
+[ ] Test: IdentifyCondominium resuelve por subdominio y configura conexión tenant.
+[ ] Test: IdentifyCondominium con host desconocido → 404.
+[ ] Test: UsesTenantConnection resuelve 'tenant' si hay currentCondominium.
+[ ] Test: UsesTenantConnection cae a default si no hay currentCondominium.
+[ ] Test: token QR de condominio A → verifyToken desde B retorna no-existe.
+
+--- 8.11 Reportes (MEDIA) ---
+[ ] Test: debtorsMonthly calcula saldo pendiente = dueUsd - paidUsdEq.
+[ ] Test: debtorsMonthly omite facturas con remaining <= 0.
+[ ] Test: debtorsMonthly agrupa por apartamento y mes.
+[ ] Test: debtorsMonthly ordena por mayor deuda total.
+[ ] Test: debtorsByTower agrupa por torre y apartamento.
+[ ] Test: export CSV tiene cabeceras correctas y filas ordenadas.
+[ ] Test: compatibilidad — reportes viejos sin status se cuentan como aprobados.
+
+--- 8.12 Auth / 2FA / Seguridad (MEDIA) ---
+[ ] Test: login con credenciales válidas → redirect a /invoices.
+[ ] Test: login con credenciales inválidas → error + rate limit hit.
+[ ] Test: login con 2FA habilitado → redirect a challenge, no autentica.
+[ ] Test: 2FA challenge con código válido → autentica.
+[ ] Test: 2FA challenge con código expirado → error.
+[ ] Test: 2FA challenge con código inválido → error + rate limit.
+[ ] Test: 2FA resend rate limited (1/min).
+[ ] Test: password reset con token válido → cambia password.
+[ ] Test: password reset con token expirado → error.
+[ ] Test: password reset con token inválido → error.
+[ ] Test: password reset no revela si email existe.
+[ ] Test: RequireLegalConsent redirige a /legal/accept si falta.
+[ ] Test: RequireLegalConsent no redirige en rutas legal.*.
+[ ] Test: profile update valida email unique en tenant.
+[ ] Test: profile updatePassword valida current_password.
+[ ] Test: 2FA enable email → envía código, no confirma hasta verify.
+[ ] Test: 2FA enable totp → genera secret encriptado.
+[ ] Test: 2FA disable requiere password.
+
+--- 8.13 Chatbot (MEDIA) ---
+[x] 10 tests ya existen (Unit/Chatbot + Unit/ChatbotTools):
+    IntentClassifier, ContextBuilder, DeepSeekClient, Guardrails, PiiSanitizer,
+    HistoryLoader, ConfirmationManager, GetInvoiceBalanceTool, ReportPaymentTool,
+    CreateSupportTicketTool.
+[ ] Test: ChatOrchestrator handle() flujo completo (mock DeepSeek).
+[ ] Test: guardrails bloquea jailbreak y fuera de dominio.
+[ ] Test: handoff detecta "hablar con administrador" → needs_human.
+[ ] Test: confirmación pendiente expira a los 5 min.
+[ ] Test: rate limit 10 msg/min por usuario.
+[ ] Test: ChatbotAdminController solo accesible por admin.
+
+--- 8.14 Comentarios (BAJA) ---
+[ ] Test: comment en factura → crea Comment + audita.
+[ ] Test: comment en payment report → crea Comment + audita.
+[ ] Test: owner no puede comentar en factura de otro apartamento.
+[ ] Test: is_internal solo lo pueden setear admins.
+[ ] Test: sendNotification notifica al owner (si admin comenta) o admins (si owner comenta).
+
+--- 8.15 Auditoría (BAJA) ---
+[ ] Test: AuditService.log crea AuditLog con user_id, action, entity_type, ip.
+[ ] Test: InvoiceObserver.created audita invoice_created.
+[ ] Test: InvoiceObserver.updated audita invoice_updated.
+[ ] Test: PaymentReportObserver.created/updated audita.
+[ ] Test: AuditLogController.index solo accesible por super_admin/condo_admin.
+[ ] Test: export CSV stream con chunks de 500.
+
+--- 8.16 API REST (MEDIA) ---
+[x] Tests ya existen: ApiAuthTest, ApiForbiddenTest, ApiGlobalErrorTest,
+    ApiInvoiceTest, ApiAccountsPaginationTest, ApiAccountsScopeTest,
+    ApiRateLimitTest, ApiRateLimitHeadersTest.
+[ ] Test: API login retorna token + roles + permisos.
+[ ] Test: API /me requiere Bearer token.
+[ ] Test: API /invoices con filtros (period, status, tower_id).
+[ ] Test: API /invoices/{id} retorna factura con items.
+[ ] Test: API /accounts scope por tower_admin.
+[ ] Test: API /rates/current retorna tasa activa.
+[ ] Test: API export CSV de invoices y accounts.
+
+--- 8.17 Comandos Artisan (BAJA) ---
+[ ] Test: invoices:notify-overdue recalcula mora y envía recordatorio.
+[ ] Test: invoices:notify-pending envía recordatorio mensual.
+[ ] Test: db:backup crea archivo .sql.gz y limpia antiguos.
+[ ] Test: tenants:migrate ejecuta migraciones en cada tenant activo.
+[ ] Test: tenants:create crea BD + registro + migraciones + admin.
+
+------------------------------------------------------------
+9. NUEVAS SUGERENCIAS (evaluadas 2026-08-09)
+------------------------------------------------------------
+
+--- 9.1 Arquitectura / Código (MEDIA) ---
+[ ] User::isAdmin() se usa en ChatbotConversationPolicy pero no está definido
+    en el modelo User. Agregar método isAdmin() que envuelva hasAnyRole
+    (['super_admin','condo_admin','tower_admin']) o usar hasAnyRole directo.
+[ ] ExchangeTransaction no usa UsesTenantConnection (las demás tablas tenant
+    sí). Agregar el trait para consistencia.
+[ ] AccountMovement no tiene relación con Account definida (solo account_id
+    como fillable). Agregar belongsTo Account.
+[ ] ExpenseItem no tiene soft deletes. Al desactivar (active=false) se evita
+    usar en nuevas facturas, pero no se puede recuperar si se borra.
+[ ] CondominiumController no valida subdomain ni db_name en store/update.
+    Agregar validación de formato (slug) y unicidad.
+[ ] TowerController no usa policy (acceso libre a cualquier auth). Agregar
+    TowerPolicy con permisos por rol.
+[ ] ApartmentController no usa policy. Agregar ApartmentPolicy.
+[ ] AccountController/AccountMovementController no usan policy. Agregar
+    AccountPolicy (solo admins).
+[ ] UserController no usa policy. Agregar UserPolicy (solo super_admin).
+[ ] CondominiumController no usa policy. Agregar CondominiumPolicy.
+
+--- 9.2 Seguridad (ALTA) ---
+[ ] Política de contraseñas en registro y creación de propietarios:
+    usar Password::min(8)->mixedCase()->numbers() (ya se usa en reset,
+    pero no en UserController.store ni ApartmentController).
+[ ] Validar que document_number sea único por condominio (hoy no se valida).
+[ ] Rate limiting en 2FA enable/confirm/disable (solo login y challenge tienen).
+[ ] Sanitizar output de logs: ApartmentController loguea payload completo
+    (incluye owner_password si viene en el request). Quitar del log.
+[ ] CORS allowed_origins = ['*'] en producción: restringir a dominios
+    conocidos del condominio.
+[ ] Session encrypt = false: considerar encriptar sesión si hay datos
+    sensibles (2fa.user_id en sesión).
+[ ] TrustHosts está comentado en Kernel (middleware global). Activar en
+    producción para prevenir host header attacks.
+[ ] Cabeceras de seguridad faltantes: X-Content-Type-Options nosniff,
+    Referrer-Policy, Permissions-Policy (además de las ya mencionadas
+    X-Frame-Options, CSP, HSTS).
+
+--- 9.3 Facturación / Dominio (MEDIA) ---
+[ ] Validar que la suma de aliquot_percent de apartamentos de una torre sea
+    100% (hoy no se valida; puede causar distribución incorrecta).
+[ ] Permitir editar factura draft sin items (hoy regenerateInvoice con
+    items vacíos funciona, pero la UI puede bloquear).
+[ ] Marcar factura como paid manualmente debería también acreditar fondo de
+    reserva (hoy solo lo hace approve de PaymentReport).
+[ ] Al anular una factura paid, revertir el aporte al fondo de reserva
+    (hoy no se revierte; el fondo queda acreditado).
+[ ] Al anular una factura paid con PaymentReport approved, revertir el
+    abono (¿marcar PaymentReport como rejected? ¿crear movimiento de
+    reversa en cuenta?).
+[ ] Reporte de flujo de caja (ingresos vs gastos por mes).
+[ ] Reporte de ingresos por concepto (ExpenseItem) con exportación.
+[ ] Reporte de fondo de reserva: movimientos y saldo por torre/general.
+[ ] Dashboard con KPIs: morosidad total, facturas pendientes, ingresos del
+    mes, gráficos por torre.
+
+--- 9.4 Multi-tenancy (MEDIA) ---
+[ ] Cachear resolución host→condominium en IdentifyCondominium (ya en
+    mejoras_futuras, reconfirmado: consulta BD master en cada request).
+[ ] Migraciones tenant con Schema::connection('tenant') hardcodeado:
+    unificar al patrón sin connection() para que migrate --database=X
+    funcione siempre (ya en mejoras_futuras, reconfirmado).
+[ ] Log::info del trait UsesTenantConnection: bajar a debug o eliminar
+    (loguea por cada modelo instanciado; ya en mejoras_futuras).
+[ ] Considerar usar tenancy/tenancy package o estandarizar el helper
+    tenancy() que ya se usa en comandos (NotifyOverdueInvoices lo usa
+    pero no está documentado cómo se inicializa en contexto web).
+
+--- 9.5 Chatbot / IA (MEDIA) ---
+[ ] Widget del chatbot oculto por diseño feo (2026-07-25): reactivar
+    mejorando UI en widget.blade.php.
+[ ] Métricas de calidad del bot (ya en mejoras_futuras, reconfirmado):
+    tasa de resolución, derivaciones a humano, tiempo de respuesta.
+[ ] Canal único de plantillas conversacionales (ya en mejoras_futuras).
+[ ] DPA de DeepSeek antes de producción (pendiente en plan_chatbot.md).
+[ ] Embeddings + búsqueda semántica en KB (fase 4 del plan).
+[ ] Códigos de recuperación para 2FA (fase 2 mencionada en mejoras_futuras).
+[ ] Botón en gestión de Usuarios para que admin desactive 2FA de un usuario
+    (hoy solo se puede editando la BD).
+
+--- 9.6 Operaciones / DX (BAJA) ---
+[ ] Script de deploy (deploy.sh): ya en mejoras_futuras, reconfirmado.
+[ ] Rotación de logs: cambiar LOG_CHANNEL de 'single' a 'daily' en .env
+    (config/logging.php ya tiene el canal 'daily' con 14 días de retención).
+[ ] Colas: verificar worker supervisado (ya en mejoras_futuras).
+[ ] Actualizar Laravel 10 → 11/12 (ya en mejoras_futuras).
+[ ] Migrar phpunit.xml al esquema nuevo (ya en mejoras_futuras).
+[ ] Healthcheck /up: configurar UptimeRobot (ya en mejoras_futuras).
+[ ] Instalar adaptador S3 en producción (ya en mejoras_futuras).
+[ ] Observabilidad de fallback storage (ya en mejoras_futuras).
+[ ] Agregar telemetry/APM (Sentry, Bugsnag o similar) para monitoreo de
+    errores en producción.
+[ ] Agregar comando artisan para limpiar sesiones expiradas y tokens
+    Sanctum expirados (sanctum:prune-expired ya existe en Sanctum, pero
+    programarlo en schedule).
+
+--- 9.7 Frontend / Vistas (MEDIA) ---
+[ ] Extraer JS inline duplicado de invoices/create y edit (ya en
+    mejoras_futuras, reconfirmado: ~300 líneas duplicadas).
+[ ] Aplicar endurecimiento JS a edit.blade.php (ya en mejoras_futuras).
+[ ] Validación visual en el form (marcar en rojo montos inválidos).
+[ ] Paginación/lazy-load en selector de apartamentos (ya en mejoras_futuras).
+[ ] Responsive: verificar que todas las vistas funcionen en móvil.
+[ ] Dark mode opcional (Bootstrap 5 lo soporta con data-bs-theme).
+[ ] Componentes Blade reutilizables para tablas, paginación y formularios
+    (hoy hay mucha duplicación de HTML entre index de cada módulo).
+
+--- 9.8 Soporte / Tickets (BAJA) ---
+[ ] Controlador/vista para listar y gestionar tickets (hoy solo creación
+    vía chatbot). Panel admin con filtros por estado/categoría/prioridad.
+[ ] Asignación de tickets (assigned_to) y resolución (resolved_at) desde UI.
+[ ] Notificación por email al asignar/resolver ticket.
+[ ] Policy para SupportTicket (hoy no tiene).
+
+--- 9.9 Integraciones (MEDIA) ---
+[ ] Integrar SMS en flujos de negocio (ya en mejoras_futuras).
+[ ] Cola para SMS (ya en mejoras_futuras).
+[ ] Plantillas SMS versionadas (ya en mejoras_futuras).
+[ ] Opt-in/opt-out de SMS (ya en mejoras_futuras).
+[ ] Rate limit y anti-spam SMS (ya en mejoras_futuras).
+[ ] Fallback de notificación SMS→email (ya en mejoras_futuras).
+[ ] Integración WhatsApp (ya en mejoras_futuras).
+[ ] Webhook de entrada para WhatsApp (fase 4 chatbot).
+[ ] API REST: ampliar endpoints (POST invoices, POST payments, CRUD
+    accounts, POST rates) para app móvil futura.
+
+------------------------------------------------------------
+10. RESUMEN DE COBERTURA DE TESTS (evaluado 2026-08-09)
+------------------------------------------------------------
+
+Tests existentes: 27 archivos, ~60 assertions.
+- Unit: InvoiceLateFeeTest, PaymentAttachmentStorageServiceTest, 7 tests Chatbot,
+  3 tests ChatbotTools.
+- Feature: BillingServiceTest, InvoiceQrVerificationTest, EnviatuSmsServiceTest,
+  ApiAuthTest, ApiForbiddenTest, ApiGlobalErrorTest, ApiInvoiceTest,
+  ApiAccountsPaginationTest, ApiAccountsScopeTest, ApiRateLimitTest,
+  ApiRateLimitHeadersTest, AccountsCsvExportTest, AuditCsvExportTest,
+  AuditLogFiltersTest, InvoicesCsvExportTest, InvoiceShowBladeRendersTest,
+  PasswordResetTest, ExampleTest.
+
+Tests sugeridos: ~120 casos nuevos cubriendo todos los módulos.
+- Prerequisitos: BD test separada + trait base + 10 factories.
+- Cobertura objetivo: 80%+ de servicios y controladores.
+- Prioridad: facturación, cobros, cuentas, fondo de reserva, policies, multi-tenant.
+
+
+# NO TOCAR:
+
+Rol	Email	Contraseña
+Super Admin	admin@admin.com	1234
+Propietarios	user_A_01@user.com … user_C_54@user.com	12345678

@@ -13,44 +13,38 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', function () { return view('welcome'); });
+Route::get('/', function () { return redirect()->route('login'); });
+Route::view('/terminos', 'legal.terms')->name('legal.terms');
+Route::view('/privacidad', 'legal.privacy')->name('legal.privacy');
+Route::view('/seguridad', 'legal.security')->name('legal.security');
+Route::view('/cookies', 'legal.cookies')->name('legal.cookies');
+Route::view('/retencion', 'legal.retention')->name('legal.retention');
+Route::get('/up', [\App\Http\Controllers\HealthController::class, 'up'])->name('health.up');
+Route::get('/verify/invoice/{token}', [\App\Http\Controllers\VerifyInvoiceController::class, 'show'])->name('verify.invoice');
+Route::get('/v/{token}', [\App\Http\Controllers\VerifyInvoiceController::class, 'show'])->name('verify.invoice.short');
+
+// Chatbot
+Route::middleware(['auth'])->prefix('chatbot')->group(function () {
+    Route::post('/message', [\App\Http\Controllers\ChatbotController::class, 'message'])->name('chatbot.message');
+    Route::get('/history', [\App\Http\Controllers\ChatbotController::class, 'history'])->name('chatbot.history');
+});
+Route::middleware(['auth'])->prefix('admin/chatbot')->group(function () {
+    Route::get('/conversations', [\App\Http\Controllers\ChatbotAdminController::class, 'conversations'])->name('chatbot.admin.conversations');
+    Route::get('/conversations/{conversation}', [\App\Http\Controllers\ChatbotAdminController::class, 'conversation'])->name('chatbot.admin.conversation');
+    Route::patch('/conversations/{conversation}/resolve', [\App\Http\Controllers\ChatbotAdminController::class, 'resolve'])->name('chatbot.admin.resolve');
+});
+
 // Auth routes (minimal)
-Route::get('login', [\App\Http\Controllers\Auth\LoginController::class,'showLogin'])->name('login');
-Route::post('login', [\App\Http\Controllers\Auth\LoginController::class,'login'])->name('login.perform');
+Route::get('login', [\App\Http\Controllers\Auth\LoginController::class,'showLogin'])->middleware('guest')->name('login');
+Route::post('login', [\App\Http\Controllers\Auth\LoginController::class,'login'])->middleware(['guest','throttle:login'])->name('login.perform');
+// Desafío 2FA (usuario aún no autenticado; estado en sesión)
+Route::get('login/2fa', [\App\Http\Controllers\Auth\TwoFactorChallengeController::class,'show'])->middleware('guest')->name('2fa.challenge');
+Route::post('login/2fa', [\App\Http\Controllers\Auth\TwoFactorChallengeController::class,'verify'])->middleware(['guest','throttle:login'])->name('2fa.verify');
+Route::post('login/2fa/resend', [\App\Http\Controllers\Auth\TwoFactorChallengeController::class,'resend'])->middleware(['guest','throttle:login'])->name('2fa.resend');
 Route::post('logout', [\App\Http\Controllers\Auth\LoginController::class,'logout'])->name('logout');
-// Debug temporal de sesión y host (solo en entorno local)
-if (env('APP_DEBUG')) {
-    Route::get('debug/session', function(\Illuminate\Http\Request $r){
-        return response()->json([
-            'host' => $r->getHost(),
-            'session_id' => $r->session()->getId(),
-            'csrf_token' => csrf_token(),
-            'user' => auth()->user()?->only(['id','email']),
-            'cookie_session' => $_COOKIE[config('session.cookie')] ?? null,
-        ]);
-    });
-    Route::get('debug/auth', function(\Illuminate\Http\Request $r){
-        $tenantDb = config('database.connections.tenant.database') ?? null;
-        // eager load roles para inspección
-        $usersRaw = \App\Models\User::with('roles')->get();
-        $users = $usersRaw->map(function($u){
-            return [
-                'id' => $u->id,
-                'email' => $u->email,
-                'active' => $u->active,
-                'roles' => $u->roles->pluck('name'),
-                'has_super_admin' => $u->hasRole('super_admin'),
-                'created_at' => $u->created_at,
-            ];
-        });
-        return response()->json([
-            'host' => $r->getHost(),
-            'tenant_db' => $tenantDb,
-            'users' => $users,
-            'count' => $users->count(),
-        ]);
-    });
-}
+// Consentimiento legal (aceptar privacidad/términos tras login)
+Route::middleware(['auth'])->get('legal/accept', [\App\Http\Controllers\LegalConsentController::class, 'showAccept'])->name('legal.accept');
+Route::middleware(['auth'])->post('legal/accept', [\App\Http\Controllers\LegalConsentController::class, 'accept'])->name('legal.accept.store');
 Route::middleware(['auth'])->prefix('invoices')->group(function(){
     Route::get('', [\App\Http\Controllers\InvoiceController::class,'index'])->name('invoices.index');
     Route::get('create', [\App\Http\Controllers\InvoiceController::class,'create'])->name('invoices.create');
@@ -64,14 +58,25 @@ Route::middleware(['auth'])->prefix('invoices')->group(function(){
     Route::get('{invoice}/payments/create', [\App\Http\Controllers\PaymentReportController::class,'create'])->name('payments.create');
     Route::post('{invoice}/payments', [\App\Http\Controllers\PaymentReportController::class,'store'])->name('payments.store');
 });
+// Profile
+Route::middleware(['auth'])->get('profile', [\App\Http\Controllers\ProfileController::class,'edit'])->name('profile.edit');
+Route::middleware(['auth'])->patch('profile', [\App\Http\Controllers\ProfileController::class,'update'])->name('profile.update');
+Route::middleware(['auth'])->patch('profile/password', [\App\Http\Controllers\ProfileController::class,'updatePassword'])->name('profile.password');
+// Verificación en dos pasos (perfil)
+Route::middleware(['auth'])->post('profile/2fa/email', [\App\Http\Controllers\TwoFactorSettingsController::class,'enableEmail'])->name('profile.2fa.email');
+Route::middleware(['auth'])->post('profile/2fa/totp', [\App\Http\Controllers\TwoFactorSettingsController::class,'enableTotp'])->name('profile.2fa.totp');
+Route::middleware(['auth'])->post('profile/2fa/confirm', [\App\Http\Controllers\TwoFactorSettingsController::class,'confirm'])->name('profile.2fa.confirm');
+Route::middleware(['auth'])->post('profile/2fa/cancel', [\App\Http\Controllers\TwoFactorSettingsController::class,'cancel'])->name('profile.2fa.cancel');
+Route::middleware(['auth'])->delete('profile/2fa', [\App\Http\Controllers\TwoFactorSettingsController::class,'disable'])->name('profile.2fa.disable');
 // Users
 Route::middleware(['auth'])->resource('users', \App\Http\Controllers\UserController::class);
 Route::patch('users/{user}/toggle', [\App\Http\Controllers\UserController::class,'toggle'])->name('users.toggle');
-// Condominiums
-Route::middleware(['auth'])->resource('condominiums', \App\Http\Controllers\CondominiumController::class);
+// Condominiums — solo super_admin puede gestionar condominios
+Route::middleware(['auth','role:super_admin'])->resource('condominiums', \App\Http\Controllers\CondominiumController::class);
 // Torres y Apartamentos (tenant context)
 Route::middleware(['auth'])->resource('towers', \App\Http\Controllers\TowerController::class)->except(['show']);
 Route::middleware(['auth'])->resource('towers.apartments', \App\Http\Controllers\ApartmentController::class)->shallow()->except(['show']);
+Route::middleware(['auth'])->delete('towers/{tower}/apartments-bulk',  [\App\Http\Controllers\ApartmentController::class,'bulkDestroy'])->name('apartments.bulkDestroy');
 // Ownerships nested under apartment
 Route::middleware(['auth'])->get('apartments/{apartment}/ownerships',[\App\Http\Controllers\OwnershipController::class,'index'])->name('ownerships.index');
 Route::middleware(['auth'])->post('apartments/{apartment}/ownerships',[\App\Http\Controllers\OwnershipController::class,'store'])->name('ownerships.store');
@@ -89,6 +94,10 @@ Route::middleware(['auth'])->patch('payments/{paymentReport}/reject', [\App\Http
 
 // Aprobar factura (borrador -> pendiente)
 Route::middleware(['auth'])->patch('invoices/{invoice}/approve', [\App\Http\Controllers\InvoiceController::class,'approve'])->name('invoices.approve');
+// Anular factura aprobada/pagada
+Route::middleware(['auth'])->patch('invoices/{invoice}/void', [\App\Http\Controllers\InvoiceController::class,'void'])->name('invoices.void');
+// Reemitir factura aprobada/pagada (genera borrador clonado y marca original reemplazada)
+Route::middleware(['auth'])->post('invoices/{invoice}/reissue', [\App\Http\Controllers\InvoiceController::class,'reissue'])->name('invoices.reissue');
 
 // Tasas de cambio
 Route::middleware(['auth'])->get('rates', [\App\Http\Controllers\CurrencyRateController::class,'index'])->name('rates.index');
@@ -108,11 +117,39 @@ Route::middleware(['auth'])->post('accounts/transfer',[\App\Http\Controllers\Acc
 // Exchange
 Route::middleware(['auth'])->get('exchange/create',[\App\Http\Controllers\ExchangeTransactionController::class,'create'])->name('exchange.create');
 Route::middleware(['auth'])->post('exchange',[\App\Http\Controllers\ExchangeTransactionController::class,'store'])->name('exchange.store');
+// Fondo de reserva (torre + general)
+Route::middleware(['auth'])->get('reserve-funds',[\App\Http\Controllers\ReserveFundController::class,'index'])->name('reserve-funds.index');
+Route::middleware(['auth'])->get('reserve-funds/config',[\App\Http\Controllers\ReserveConfigController::class,'edit'])->name('reserve-funds.config.edit');
+Route::middleware(['auth'])->patch('reserve-funds/config',[\App\Http\Controllers\ReserveConfigController::class,'update'])->name('reserve-funds.config.update');
+Route::middleware(['auth'])->get('reserve-funds/{reserveFund}',[\App\Http\Controllers\ReserveFundController::class,'show'])->name('reserve-funds.show');
+Route::middleware(['auth'])->get('reserve-funds/{reserveFund}/movements/create',[\App\Http\Controllers\ReserveFundController::class,'createMovement'])->name('reserve-funds.movements.create');
+Route::middleware(['auth'])->post('reserve-funds/{reserveFund}/movements',[\App\Http\Controllers\ReserveFundController::class,'storeMovement'])->name('reserve-funds.movements.store');
 // Password reset (sin auth)
-Route::get('password/forgot',[\App\Http\Controllers\PasswordResetController::class,'showForgot']);
-Route::post('password/forgot',[\App\Http\Controllers\PasswordResetController::class,'sendLink']);
-Route::get('password/reset/{token}',[\App\Http\Controllers\PasswordResetController::class,'showReset']);
-Route::post('password/reset',[\App\Http\Controllers\PasswordResetController::class,'performReset']);
+Route::get('password/forgot', [\App\Http\Controllers\PasswordResetController::class, 'showForgot'])
+    ->middleware(['guest'])
+    ->name('password.forgot');
+Route::post('password/forgot', [\App\Http\Controllers\PasswordResetController::class, 'sendLink'])
+    ->middleware(['guest', 'throttle:password-forgot'])
+    ->name('password.forgot.send');
+Route::get('password/reset/{token}', [\App\Http\Controllers\PasswordResetController::class, 'showReset'])
+    ->middleware(['guest'])
+    ->name('password.reset');
+Route::post('password/reset', [\App\Http\Controllers\PasswordResetController::class, 'performReset'])
+    ->middleware(['guest', 'throttle:password-reset'])
+    ->name('password.reset.update');
+
+// Comentarios privados en facturas y reportes de pago
+Route::middleware(['auth'])->post('invoices/{invoice}/comments', [\App\Http\Controllers\CommentController::class, 'storeInvoiceComment'])
+    ->name('invoices.comments.store');
+Route::middleware(['auth'])->post('payment-reports/{paymentReport}/comments', [\App\Http\Controllers\CommentController::class, 'storePaymentReportComment'])
+    ->name('payment-reports.comments.store');
 // Auditoría
 Route::middleware(['auth'])->get('audit-logs',[\App\Http\Controllers\AuditLogController::class,'index'])->name('audit.logs.index'); // export CSV via ?export=csv
+
+// Reportes
+Route::middleware(['auth'])->get('reports/debtors-monthly', [\App\Http\Controllers\ReportController::class, 'debtorsMonthly'])->name('reports.debtorsMonthly');
+Route::middleware(['auth'])->get('reports/debtors-monthly/pdf', [\App\Http\Controllers\ReportController::class, 'debtorsMonthlyPdf'])->name('reports.debtorsMonthlyPdf');
+Route::middleware(['auth'])->get('reports/debtors-by-tower', [\App\Http\Controllers\ReportController::class, 'debtorsByTower'])->name('reports.debtorsByTower');
+Route::middleware(['auth'])->get('reports/debtors-by-tower/csv', [\App\Http\Controllers\ReportController::class, 'debtorsByTowerCsv'])->name('reports.debtorsByTowerCsv');
+Route::middleware(['auth'])->get('reports/debtors-by-tower/pdf', [\App\Http\Controllers\ReportController::class, 'debtorsByTowerPdf'])->name('reports.debtorsByTowerPdf');
 

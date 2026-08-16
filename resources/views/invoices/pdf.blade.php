@@ -9,14 +9,18 @@
 		.brand .subtitle{font-size:12px;color:#666;margin:2px 0 0 0}
 		.doc h2{margin:0;font-size:16px}
 		.meta{margin:8px 0 0 0;font-size:11px;color:#444}
-		table{width:100%;border-collapse:collapse;margin-top:10px}
-		th,td{border:1px solid #bbb;padding:6px 6px;text-align:left;font-size:11px}
+		table{width:100%;border-collapse:collapse;margin-top:10px;table-layout:auto}
+		th,td{border:1px solid #bbb;padding:4px 5px;text-align:left;font-size:10px;word-wrap:break-word}
 		th{background:#efefef}
 		tbody tr:nth-child(odd){background:#fafafa}
 		.right{text-align:right}
 		.totals{margin-top:12px;border-top:2px solid #444;padding-top:8px}
 		.totals p{margin:3px 0}
 		.small{font-size:10px;color:#666;margin-top:12px}
+		.verify-block{margin-top:8px;border:1px solid #ccc;padding:6px;display:table;width:100%}
+		.verify-left{display:table-cell;vertical-align:top;width:72%}
+		.verify-right{display:table-cell;vertical-align:top;text-align:right}
+		.verify-url{font-size:9px;word-break:break-all;color:#444}
 		.watermark{position:fixed;top:40%;left:15%;font-size:64px;color:rgba(0,0,0,0.06);transform:rotate(-25deg)}
 		.watermark2{position:fixed;top:65%;left:10%;font-size:64px;color:rgba(0,0,0,0.06);transform:rotate(-25deg)}
 		.watermark3{position:fixed;top:18%;left:20%;font-size:64px;color:rgba(0,0,0,0.06);transform:rotate(-25deg)}
@@ -56,6 +60,10 @@
 			Factura {{ $invoice->number ?? ('#'.$invoice->id) }} — Periodo {{$invoice->period}}
 			@if($isChild && $invoice->apartment)
 				— Apartamento: {{ $invoice->apartment->code }}
+				@if($invoice->owner_name)
+					— Propietario: {{ $invoice->owner_name }}
+					@if($invoice->owner_document) ({{ $invoice->owner_document }}) @endif
+				@endif
 				@if($invoice->late_fee_scope)
 					— {{ $invoice->lateFeeLabel() }}
 				@endif
@@ -64,13 +72,20 @@
 	</div>
 	<div class="doc">
 		<h2>Total USD {{ number_format($grandUsd,2) }}</h2>
-		<div class="meta">Estado: {{$invoice->statusLabel()}} | Vence: {{$invoice->due_date? $invoice->due_date->format('Y-m-d'):'--'}}<br/>Tasa usada: {{$invoice->exchange_rate_used}} @if($invoice->tower) | Torre: {{$invoice->tower->name}} @endif</div>
+		<div class="meta">Estado: {{$invoice->statusLabel()}} | Vence: {{$invoice->due_date? $invoice->due_date->format('Y-m-d'):'--'}}<br/>Tasa usada: {{ number_format((float)$invoice->exchange_rate_used, 2) }} @if($invoice->tower) | Torre: {{$invoice->tower->name}} @endif</div>
 	</div>
-    
-    
-    
-    
 </div>
+
+	<div class="verify-block">
+		<div class="verify-left">
+			<strong>Verificación antifalsificación</strong><br>
+			<span class="muted">Escanea el QR o abre esta URL para validar firma y estado.</span>
+			<div class="verify-url">{{ $verifyUrl }}</div>
+		</div>
+		<div class="verify-right">
+			{!! $invoiceQrSvg !!}
+		</div>
+	</div>
 
 @if($items && $items->count())
 <table>
@@ -93,8 +108,8 @@
 			@if(!$isChild)
 				<td>{{ $it->apartment->code ?? ('Apto #'.$it->apartment_id) }}</td>
 			@endif
-			<td>{{ $it->expenseItem->name ?? ('Item '.$it->expense_item_id) }}</td>
-			<td>{{ (($it->expenseItem->type ?? 'fixed') === 'aliquot') ? 'Alícuota' : 'Fijo' }}</td>
+			<td>{{ $it->is_reserve ? 'Fondo de Reserva' : ($it->expenseItem->name ?? ('Item '.$it->expense_item_id)) }}</td>
+			<td>{{ $it->is_reserve ? 'Reserva' : ($it->distributed ? 'Alícuota' : 'Fijo') }}</td>
 			<td class="right">{{ number_format($it->subtotal_usd,2) }}</td>
 			<td class="right">{{ number_format($it->subtotal_ves,2) }}</td>
 		</tr>
@@ -136,16 +151,16 @@
 	@if($allPayments->count() > 0)
 		<hr/>
 		<h3 style="margin:6px 0 4px">Pagos registrados</h3>
-		<table class="table">
+		<table>
 			<thead>
 				<tr>
-					<th style="width:80px">#</th>
-					<th style="width:120px">Fecha</th>
-					<th style="width:90px">Estado</th>
-					<th style="width:90px">USD equiv</th>
-					<th style="width:80px">USD</th>
-					<th style="width:110px">VES</th>
-					<th style="width:100px">Tasa</th>
+					<th>#</th>
+					<th>Fecha</th>
+					<th>Estado</th>
+					<th class="right">USD equiv</th>
+					<th class="right">USD</th>
+					<th class="right">VES</th>
+					<th class="right">Tasa</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -157,7 +172,7 @@
 						<td class="right">{{ number_format((float)$pr->usdEquivalent(),2) }}</td>
 						<td class="right">{{ number_format((float)$pr->amount_usd,2) }}</td>
 						<td class="right">{{ number_format((float)$pr->amount_ves,2) }}</td>
-						<td class="right">{{ number_format((float)$pr->exchange_rate_used,6) }}</td>
+						<td class="right">{{ number_format((float)$pr->exchange_rate_used,2) }}</td>
 					</tr>
 				@endforeach
 			</tbody>

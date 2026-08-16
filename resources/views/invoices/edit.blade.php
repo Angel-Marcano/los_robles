@@ -1,7 +1,9 @@
 @extends('layouts.app')
 @section('content')
-<div class="container py-3">
-  <h2 class="h4 mb-3">Editar Factura #{{ $invoice->id }}</h2>
+  <div class="d-flex justify-content-between align-items-center page-header">
+    <h1><i class="bi bi-pencil-square me-2"></i>Editar Factura #{{ $invoice->id }}</h1>
+    <a class="btn btn-outline-secondary btn-action" href="{{ route('invoices.show',$invoice) }}"><i class="bi bi-arrow-left"></i> Volver</a>
+  </div>
   @if($invoice->status!=='draft')
     <div class="alert alert-warning">Solo se puede editar cuando la factura está en borrador.</div>
   @endif
@@ -18,8 +20,21 @@
 
     <div class="row g-3">
       <div class="col-md-3">
-        <label class="form-label">Periodo (YYYY-MM)</label>
-        <input type="text" name="period" class="form-control" value="{{ old('period', $invoice->period) }}" required>
+        <label class="form-label">Periodo</label>
+        <input type="hidden" name="period" id="periodValue" value="{{ old('period', $invoice->period) }}" required>
+        <div class="d-flex gap-2">
+          <select id="periodMonth" class="form-select" onchange="syncPeriod()">
+            @foreach(['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'] as $num => $nombre)
+              <option value="{{ $num }}" @if(substr((string) old('period', $invoice->period), 5, 2) === $num) selected @endif>{{ $nombre }}</option>
+            @endforeach
+          </select>
+          <select id="periodYear" class="form-select" onchange="syncPeriod()">
+            @php($selectedYear = (int) substr((string) old('period', $invoice->period), 0, 4))
+            @for($y = $selectedYear - 2; $y <= $selectedYear + 2; $y++)
+              <option value="{{ $y }}" @if($y === $selectedYear) selected @endif>{{ $y }}</option>
+            @endfor
+          </select>
+        </div>
       </div>
       <div class="col-md-3">
         <label class="form-label">Torre</label>
@@ -54,11 +69,9 @@
     </div>
 
     <hr class="my-3">
-
     <div class="row g-3">
       <div class="col-md-6">
         <label class="form-label">Apartamentos</label>
-        @php $towerMap = $towers->pluck('name','id'); @endphp
         <div class="d-flex gap-2 align-items-center mb-2">
           <div class="input-group input-group-sm" style="max-width: 260px;">
             <span class="input-group-text">Buscar</span>
@@ -73,17 +86,18 @@
           <button type="button" class="btn btn-sm btn-outline-primary" id="apt-global-select-visible">Seleccionar visibles</button>
           <button type="button" class="btn btn-sm btn-outline-secondary" id="apt-global-clear-visible">Limpiar visibles</button>
         </div>
-        <div id="global-apartments-list" class="border rounded p-2" style="max-height:260px; overflow:auto">
+        <div id="global-apartments-list" class="border rounded p-2 d-flex flex-wrap gap-1" style="max-height:260px; overflow:auto">
           @foreach($apartments as $ap)
-            <div class="form-check apartment-row" data-tower-id="{{ $ap->tower_id }}" data-tower-name="{{ $towerMap[$ap->tower_id] ?? '' }}" data-code="{{ \Illuminate\Support\Str::lower($ap->code) }}">
-              <input class="form-check-input" type="checkbox" name="apartment_ids[]" value="{{ $ap->id }}" id="ap{{ $ap->id }}" @if(collect($selectedApartmentIds??[])->contains($ap->id)) checked @endif>
-              <label class="form-check-label" for="ap{{ $ap->id }}">{{ $ap->code }} — {{ $ap->aliquot_percent }}% <span class="text-muted">(Torre: {{ $towerMap[$ap->tower_id] ?? '-' }})</span></label>
+            <div class="apartment-row" data-tower-id="{{ $ap->tower_id }}" data-tower-name="{{ optional($towers->firstWhere('id', $ap->tower_id))->name ?? '' }}" data-code="{{ \Illuminate\Support\Str::lower($ap->code) }}" style="width:auto;">
+              <input class="btn-check" type="checkbox" name="apartment_ids[]" value="{{ $ap->id }}" id="ap{{ $ap->id }}" @if(collect($selectedApartmentIds??[])->contains($ap->id)) checked @endif autocomplete="off">
+              <label class="btn btn-outline-secondary btn-sm py-1 px-2" for="ap{{ $ap->id }}" title="{{ optional($towers->firstWhere('id', $ap->tower_id))->name ?? '-' }} — {{ $ap->aliquot_percent }}%">{{ $ap->code }}</label>
             </div>
           @endforeach
         </div>
       </div>
       <div class="col-md-6">
         <label class="form-label">Gastos del catálogo</label>
+        <div class="small text-muted mb-2">Tasa activa: <strong id="rateLabel">{{ number_format((float)((isset($activeRate) && $activeRate) ? $activeRate->rate : ($invoice->exchange_rate_used ?? 0)), 2) }}</strong> VES/USD</div>
         <div class="d-flex justify-content-end mb-2">
           <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openNewExpenseModal()">Nuevo gasto</button>
         </div>
@@ -117,6 +131,7 @@
               <tr>
                 <th>Gasto</th>
                 <th style="width:120px">Monto USD</th>
+                <th style="width:120px">Monto VES</th>
                 <th style="width:100px">Cantidad</th>
                 <th style="width:140px">Distribución</th>
                 <th style="width:100px">Aptos</th>
@@ -130,17 +145,47 @@
     </div>
 
     <input type="hidden" name="items_payload" id="items_payload">
+    <div class="row mt-3">
+      <div class="col-md-6 mb-3">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="includeTowerReserve" name="include_tower_reserve" value="1" checked>
+          <label class="form-label" for="includeTowerReserve">
+            <i class="bi bi-piggy-bank me-1"></i>Incluir fondo de reserva de torre
+            <span class="text-muted small">(según el % de cada torre)</span>
+          </label>
+        </div>
+      </div>
+      <div class="col-md-6 mb-3">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="includeGeneralReserve" name="include_general_reserve" value="1" checked>
+          <label class="form-label" for="includeGeneralReserve">
+            <i class="bi bi-piggy-bank-fill me-1"></i>Incluir fondo de reserva general
+            <span class="text-muted small">({{ (float)(app()->bound('currentCondominium') ? app('currentCondominium')->reserve_percent : 0) }}% del condominio)</span>
+          </label>
+        </div>
+      </div>
+    </div>
     <div class="mt-3 d-flex justify-content-end gap-2">
-      <a class="btn btn-outline-secondary" href="{{ route('invoices.show',$invoice) }}">Cancelar</a>
-      <button type="submit" class="btn btn-primary" onclick="return beforeSubmit()">Guardar cambios</button>
+      <a class="btn btn-outline-secondary btn-action" href="{{ route('invoices.show',$invoice) }}"><i class="bi bi-x-lg"></i> Cancelar</a>
+      <button type="submit" class="btn btn-primary btn-action" onclick="return beforeSubmit()"><i class="bi bi-check-lg"></i> Guardar cambios</button>
     </div>
   </form>
-</div>
 @endsection
 
 @push('scripts')
 <script>
+function syncPeriod(){
+  const m = document.getElementById('periodMonth').value;
+  const y = document.getElementById('periodYear').value;
+  document.getElementById('periodValue').value = y + '-' + m;
+}
+const activeRate = {{ (float)((isset($activeRate) && $activeRate) ? $activeRate->rate : ($invoice->exchange_rate_used ?? 0)) > 0 ? (float)((isset($activeRate) && $activeRate) ? $activeRate->rate : ($invoice->exchange_rate_used ?? 0)) : 0 }};
 const items = [];
+function parseDecimalValue(value){
+  const normalized = String(value ?? '').replace(',', '.').trim();
+  const num = parseFloat(normalized);
+  return Number.isFinite(num) ? num : 0;
+}
 
 function escapeHtml(str){
   return String(str ?? '')
@@ -183,7 +228,7 @@ function wireCatalogButtons(){
 function addItem(id, name){
   const exists = items.find(i => i.expense_item_id === id);
   if(exists){ alert('Ya agregado'); return; }
-  items.push({expense_item_id:id, name:name, amount:0, quantity:1, distribution:'aliquota', apartment_ids: []});
+  items.push({expense_item_id:id, name:name, amount:0, amount_ves:0, quantity:1, distribution:'aliquota', apartment_ids: []});
   renderItems();
 }
 function removeItem(id){
@@ -199,6 +244,7 @@ function renderItems(){
     tr.innerHTML = `
       <td>${escapeHtml(i.name)}</td>
       <td><input type="number" step="0.01" class="form-control form-control-sm" value="${i.amount}" data-idx="${idx}" data-field="amount"></td>
+      <td><input type="number" step="0.01" class="form-control form-control-sm" value="${(i.amount_ves ?? ((i.amount||0)*activeRate)).toFixed(2)}" data-idx="${idx}" data-field="amount_ves"></td>
       <td><input type="number" step="1" min="1" class="form-control form-control-sm" value="${i.quantity}" data-idx="${idx}" data-field="quantity"></td>
       <td>
         <select class="form-select form-select-sm" data-idx="${idx}" data-field="distribution">
@@ -214,12 +260,31 @@ function renderItems(){
   // bind events
   tbody.querySelectorAll('input[data-field=amount]').forEach(el=>{
     el.addEventListener('input', (e)=>{
-      const idx = parseInt(e.target.getAttribute('data-idx')); items[idx].amount = parseFloat(e.target.value||0);
+      const idx = parseInt(e.target.getAttribute('data-idx'));
+      const usd = parseDecimalValue(e.target.value);
+      items[idx].amount = usd;
+      items[idx].amount_ves = activeRate > 0 ? (usd * activeRate) : 0;
+      const amountVesInput = tbody.querySelector(`input[data-field="amount_ves"][data-idx="${idx}"]`);
+      if(amountVesInput){
+        amountVesInput.value = Number(items[idx].amount_ves || 0).toFixed(2);
+      }
+    });
+  });
+  tbody.querySelectorAll('input[data-field=amount_ves]').forEach(el=>{
+    el.addEventListener('input', (e)=>{
+      const idx = parseInt(e.target.getAttribute('data-idx'));
+      const ves = parseDecimalValue(e.target.value);
+      items[idx].amount_ves = ves;
+      items[idx].amount = activeRate > 0 ? (ves / activeRate) : 0;
+      const amountInput = tbody.querySelector(`input[data-field="amount"][data-idx="${idx}"]`);
+      if(amountInput){
+        amountInput.value = Number(items[idx].amount || 0).toFixed(2);
+      }
     });
   });
   tbody.querySelectorAll('input[data-field=quantity]').forEach(el=>{
     el.addEventListener('input', (e)=>{
-      const idx = parseInt(e.target.getAttribute('data-idx')); items[idx].quantity = Math.max(1, parseInt(e.target.value||1));
+      const idx = parseInt(e.target.getAttribute('data-idx')); items[idx].quantity = Math.max(1, parseInt(e.target.value || 1, 10) || 1);
     });
   });
   tbody.querySelectorAll('select[data-field=distribution]').forEach(el=>{
@@ -242,7 +307,15 @@ function renderItems(){
   updateCatalogButtons();
 }
 function beforeSubmit(){
-  document.getElementById('items_payload').value = JSON.stringify(items);
+  const payload = items.map(i => ({
+    expense_item_id: i.expense_item_id,
+    amount: parseDecimalValue(i.amount || 0),
+    amount_ves: parseDecimalValue(i.amount_ves || 0),
+    quantity: Math.max(1, parseInt(i.quantity || 1, 10) || 1),
+    distribution: i.distribution || 'aliquota',
+    apartment_ids: Array.isArray(i.apartment_ids) ? i.apartment_ids : [],
+  }));
+  document.getElementById('items_payload').value = JSON.stringify(payload);
   return true;
 }
 // Prefill from server
@@ -252,12 +325,15 @@ const prefill = @json($prefill);
   const aptIds = (Array.isArray(p.apartment_ids)
     ? [...p.apartment_ids] // CLONE para evitar compartir referencia entre ítems
     : []);
+  const prefillAmount = parseDecimalValue(p.amount || 0);
+  const prefillAmountVes = parseDecimalValue(p.amount_ves || 0);
 
   items.push({
     expense_item_id: p.expense_item_id,
     name: p.name || ('Item ' + p.expense_item_id),
-    amount: parseFloat(p.amount || 0),
-    quantity: parseInt(p.quantity || 1),
+    amount: prefillAmount,
+    amount_ves: prefillAmountVes > 0 ? prefillAmountVes : (activeRate > 0 ? (prefillAmount * activeRate) : 0),
+    quantity: Math.max(1, parseInt(p.quantity || 1, 10) || 1),
     distribution: p.distribution || 'aliquota',
     apartment_ids: aptIds,
   });
@@ -278,7 +354,7 @@ filterInput?.addEventListener('input', (e)=>{
 
 // Modal de selección de apartamentos por ítem
 let currentIdx = null;
-@php($aptosForJson = $apartments->map(function($ap) use ($towerMap) { return ['id'=>$ap->id,'code'=>$ap->code,'aliquot'=>$ap->aliquot_percent,'tower_id'=>$ap->tower_id,'tower_name'=>$towerMap[$ap->tower_id]??'']; })->values())
+@php($aptosForJson = $apartments->map(function($ap) use ($towers) { return ['id'=>$ap->id,'code'=>$ap->code,'aliquot'=>$ap->aliquot_percent,'tower_id'=>$ap->tower_id,'tower_name'=>optional($towers->firstWhere('id', $ap->tower_id))->name ?? '']; })->values())
 const allAptos = @json($aptosForJson);
 function renderModalAptosList(){
   const list = document.getElementById('aptos-list');

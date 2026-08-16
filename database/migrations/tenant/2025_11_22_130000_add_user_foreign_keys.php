@@ -7,6 +7,11 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     public function up(): void
     {
+        // Solo MySQL: sqlite (tests) no soporta agregar FKs post-creación ni information_schema
+        if (DB::connection(Schema::getConnection()->getName())->getDriverName() !== 'mysql') {
+            return;
+        }
+
         // Helper para saber si existe FK por nombre (sin Doctrine)
         $fkExists = function(string $table, string $fkName): bool {
             $rows = DB::select("SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = database() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?", [$table, $fkName]);

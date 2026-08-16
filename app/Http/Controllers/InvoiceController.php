@@ -1,50 +1,66 @@
 <?php
 namespace App\Http\Controllers; 
 use App\Models\{Invoice,ExpenseItem,CurrencyRate,Tower,Apartment,PaymentReport}; 
+use App\Http\Requests\{StoreInvoiceRequest,UpdateInvoiceRequest};
 use Dompdf\Dompdf; 
 use Dompdf\Options; 
 use Illuminate\Http\Request; 
 use App\Services\BillingService;
+use App\Services\AuditService;
+use App\Services\InvoiceVerificationService;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
 class InvoiceController extends Controller {
     public function index(Request $request){
-        $this->authorize('create', Invoice::class); // reutilizamos permiso
+        $this->authorize('viewAny', Invoice::class);
+        $user = auth()->user();
+        $isAdmin = $user->hasRole('super_admin') || $user->hasRole('condo_admin') || $user->hasRole('tower_admin');
         $q = Invoice::query()
             ->with(['tower','apartment.tower','children.apartment.tower'])
             ->withCount('children');
+
+        // Owners/residents: only see their own sub-invoices (child invoices)
+        if(!$isAdmin){
+            $ownedAptIds = \App\Models\Ownership::where('user_id',$user->id)->pluck('apartment_id');
+            $q->whereNotNull('parent_id')->whereIn('apartment_id', $ownedAptIds);
+        }
         if($request->filled('period')){ $q->where('period',$request->get('period')); }
         if($request->filled('status')){ $q->where('status',$request->get('status')); }
-        if($request->filled('tower_id')){ $q->where('tower_id',$request->get('tower_id')); }
-        // Por defecto: mostrar solo facturas padre (no listar hijas en el listado principal)
-        $type = $request->get('type', 'parent');
-        if($type === 'all'){
-            // sin filtro
-        } elseif($type === 'child') {
-            $q->whereNotNull('parent_id');
-        } else {
-            // parent (default)
-            $q->whereNull('parent_id');
-        }
+        // Admin-only filters
+        if($isAdmin){
+            if($request->filled('tower_id')){ $q->where('tower_id',$request->get('tower_id')); }
+            // Por defecto: mostrar solo facturas padre (no listar hijas en el listado principal)
+            $type = $request->get('type', 'parent');
+            if($type === 'all'){
+                // sin filtro
+            } elseif($type === 'child') {
+                $q->whereNotNull('parent_id');
+            } else {
+                // parent (default)
+                $q->whereNull('parent_id');
+            }
 
-        // Compatibilidad hacia atrás: si alguien usa filtros antiguos
-        if($request->filled('type')){
-            $legacy = $request->get('type');
-            if($legacy==='simple'){
-                $q->whereNull('parent_id')->whereDoesntHave('children');
+            // Compatibilidad hacia atrás: si alguien usa filtros antiguos
+            if($request->filled('type')){
+                $legacy = $request->get('type');
+                if($legacy==='simple'){
+                    $q->whereNull('parent_id')->whereDoesntHave('children');
+                }
             }
-            if($legacy==='parent'){
-                // ya aplica whereNull('parent_id') arriba; no forzamos whereHas('children')
-            }
+            if($request->filled('created_from')){ $q->whereDate('created_at','>=',$request->get('created_from')); }
+            if($request->filled('created_to')){ $q->whereDate('created_at','<=',$request->get('created_to')); }
         }
-        if($request->filled('created_from')){ $q->whereDate('created_at','>=',$request->get('created_from')); }
-        if($request->filled('created_to')){ $q->whereDate('created_at','<=',$request->get('created_to')); }
         $perPage=(int)$request->get('per_page',20); if(!in_array($perPage,[10,20,50])){ $perPage=20; }
         $invoices=$q->orderByDesc('id')->paginate($perPage)->appends($request->query());
-        $towers = Tower::orderBy('name')->get();
-        return view('invoices.index', compact('invoices','towers'));
+        $towers = $isAdmin ? Tower::orderBy('name')->get() : collect();
+        return view('invoices.index', compact('invoices','towers','isAdmin'));
     }
-    public function pdf(Invoice $invoice){ 
+    public function pdf(Invoice $invoice, InvoiceVerificationService $verification){ 
         $this->authorize('view',$invoice); 
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(120);
         // Eager load to avoid lazy-loading issues and N+1 in view
         $invoice->load(['items.apartment','items.expenseItem','tower','apartment','paymentReports']);
         // Filter items for residents: show only their apartment charges
@@ -58,20 +74,44 @@ class InvoiceController extends Controller {
         // Compute personalized totals for viewer
         $myTotalUsd = round($items->sum('subtotal_usd'),2);
         $myTotalVes = round($items->sum('subtotal_ves'),2);
+        $verification->ensureSignature($invoice);
+        $verifyUrl = $verification->verificationUrl($invoice);
+        $invoiceQrSvg = $verification->qrSvgForInvoice($invoice, 130);
+
         $html=view('invoices.pdf',[
             'invoice'=>$invoice,
             'items'=>$items,
+            'verifyUrl' => $verifyUrl,
+            'invoiceQrSvg' => $invoiceQrSvg,
             'viewerTotals'=>[ 'usd'=>$myTotalUsd, 'ves'=>$myTotalVes, 'isAdmin'=>$isAdmin ],
         ])->render(); 
+        $dompdfTempDir = storage_path('app/dompdf/temp');
+        $dompdfFontCacheDir = storage_path('app/dompdf/font-cache');
+        if(!File::exists($dompdfTempDir)){ File::makeDirectory($dompdfTempDir, 0775, true); }
+        if(!File::exists($dompdfFontCacheDir)){ File::makeDirectory($dompdfFontCacheDir, 0775, true); }
         $options = new Options();
         $options->set('defaultFont','DejaVu Sans');
         $options->set('isHtml5ParserEnabled', true);
         $options->set('isRemoteEnabled', false); // inline CSS only
-        $dompdf=new Dompdf($options); 
-        $dompdf->loadHtml($html);
-        $dompdf->setPaper('letter','portrait');
-        $dompdf->render(); 
-        return response($dompdf->output(),200,['Content-Type'=>'application/pdf']); 
+        $options->set('isFontSubsettingEnabled', true);
+        $options->set('dpi', 96);
+        $options->set('tempDir', $dompdfTempDir);
+        $options->set('fontCache', $dompdfFontCacheDir);
+        $options->set('chroot', base_path());
+        try {
+            $dompdf=new Dompdf($options); 
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('letter','portrait');
+            $dompdf->render(); 
+            return response($dompdf->output(),200,['Content-Type'=>'application/pdf']); 
+        } catch (\Throwable $e) {
+            Log::error('PDF generation failed', [
+                'invoice_id' => $invoice->id,
+                'user_id' => auth()->id(),
+                'message' => $e->getMessage(),
+            ]);
+            return back()->withErrors(['pdf' => 'No se pudo generar el PDF. Revisa permisos de storage y extensiones PHP del servidor.']);
+        }
     }
     public function markPaid(Invoice $invoice, Request $request){ 
         $this->authorize('markPaid',$invoice); 
@@ -136,10 +176,14 @@ class InvoiceController extends Controller {
                     }
                 }
             }
+            app(AuditService::class)->log('invoice_marked_paid','Invoice',$invoice->id,[
+                'cascade' => $request->boolean('cascade'),
+                'late_fee_accrued_usd' => $lateUsd,
+            ]);
         } 
         return redirect()->route('invoices.show',$invoice); 
     }
-    public function approve(Invoice $invoice){
+    public function approve(Invoice $invoice, InvoiceVerificationService $verification){
         $this->authorize('update',$invoice);
         if($invoice->status!=='draft') { return redirect()->route('invoices.show',$invoice)->with('status','La factura no está en borrador'); }
         // Debe tener items
@@ -160,22 +204,40 @@ class InvoiceController extends Controller {
 
             // Preload apartment info for numbering + tower assignment
             $aptRows = \App\Models\Apartment::whereIn('id', $itemsByApt->keys())->get(['id','code','tower_id'])->keyBy('id');
+
+            // Preload active owners for snapshot
+            $ownersByApt = \App\Models\Ownership::whereIn('apartment_id', $itemsByApt->keys())
+                ->where('active', true)
+                ->where('role', 'owner')
+                ->with('user:id,name,email,document_type,document_number')
+                ->get()
+                ->keyBy('apartment_id');
+
             $childInvoices = collect();
             foreach($itemsByApt as $apartmentId=>$rows){
                 $totalUsd = round($rows->sum('subtotal_usd'),2);
-                $aptCode = optional($aptRows->get($apartmentId))->code ?? ('APT-'.$apartmentId);
+                $totalVes = round($rows->sum('subtotal_ves'),2);
                 $childTowerId = $invoice->tower_id ?? optional($aptRows->get($apartmentId))->tower_id;
-                // Generar número base y asegurar unicidad con sufijo incremental si existe
-                $baseNumber = 'INV-'.$invoice->period.'-'.$aptCode;
-                $number = $baseNumber;
-                $suffix = 2;
-                while(\App\Models\Invoice::where('number',$number)->exists()){
-                    $number = $baseNumber.'-'.$suffix;
-                    $suffix++;
-                    if($suffix > 50){ break; } // límite de seguridad
-                }
-                $child = \App\Models\Invoice::create([
+
+                // Snapshot del propietario activo
+                $ownerUser = optional(optional($ownersByApt->get($apartmentId))->user);
+                $ownerName = $ownerUser->name;
+                $ownerEmail = $ownerUser->email;
+                $docType = $ownerUser->document_type;
+                $docNum  = $ownerUser->document_number;
+                $ownerDocument = ($docType && $docNum) ? ($docType . '-' . $docNum) : $docNum;
+
+                $child = null;
+                $attempts = 0;
+                while ($child === null && $attempts < 5) {
+                    $attempts++;
+                    $correlative = $this->nextInvoiceCorrelative();
+                    $number = sprintf('INV-%s-%06d', $invoice->period, $correlative);
+
+                    try {
+                        $child = \App\Models\Invoice::create([
                     'number'           => $number,
+                    'correlative'      => $correlative,
                     'parent_id'         => $invoice->id,
                     'apartment_id'      => $apartmentId,
                     'tower_id'          => $childTowerId,
@@ -188,8 +250,18 @@ class InvoiceController extends Controller {
                     'late_fee_value'    => $invoice->late_fee_value,
                     'exchange_rate_used'=> $usedRate,
                     'total_usd'         => $totalUsd,
-                    'total_ves'         => round($totalUsd * $usedRate, 2),
-                ]);
+                    'total_ves'         => $totalVes,
+                    'owner_name'        => $ownerName,
+                    'owner_email'       => $ownerEmail,
+                    'owner_document'    => $ownerDocument,
+                        ]);
+                    } catch (QueryException $e) {
+                        // Reintenta si otro proceso consumió el correlativo en paralelo.
+                        if ($attempts >= 5) {
+                            throw $e;
+                        }
+                    }
+                }
                 // Copiar items de ese apartamento a la sub-factura
                 foreach($rows as $row){
                     \App\Models\InvoiceItem::create([
@@ -197,8 +269,10 @@ class InvoiceController extends Controller {
                         'apartment_id'    => $row->apartment_id,
                         'expense_item_id' => $row->expense_item_id,
                         'base_amount_usd' => $row->base_amount_usd,
+                        'base_amount_ves' => $row->base_amount_ves,
                         'quantity'        => $row->quantity,
                         'distributed'     => $row->distributed,
+                        'is_reserve'      => $row->is_reserve,
                         'subtotal_usd'    => $row->subtotal_usd,
                         'subtotal_ves'    => $row->subtotal_ves,
                     ]);
@@ -212,18 +286,42 @@ class InvoiceController extends Controller {
 
         // Notificar propietarios con sus sub-facturas (fuera de transacción)
         $byApt = $childInvoices->keyBy('apartment_id');
+        $verification->ensureSignature($invoice);
+        foreach ($childInvoices as $childInvoice) {
+            $verification->ensureSignature($childInvoice);
+        }
         $recipientPairs = \App\Models\Ownership::whereIn('apartment_id',$byApt->keys())->get(['user_id','apartment_id']);
         foreach($recipientPairs as $pair){
             $user = \App\Models\User::find($pair->user_id);
             $child = $byApt->get($pair->apartment_id);
             if($user && $user->email && $child){ \Mail::to($user->email)->queue(new \App\Mail\InvoiceCreatedMail($child)); }
         }
+        app(AuditService::class)->log('invoice_approved','Invoice',$invoice->id,[
+            'children_count' => $childInvoices->count(),
+        ]);
         return redirect()->route('invoices.show',$invoice)->with('status','Factura aprobada y sub-facturas generadas');
     }
-    public function show(Invoice $invoice){ 
+
+    protected function nextInvoiceCorrelative(): int
+    {
+        $row = Invoice::query()
+            ->whereNotNull('correlative')
+            ->orderByDesc('correlative')
+            ->lockForUpdate()
+            ->first(['correlative']);
+
+        $last = $row ? (int) $row->correlative : 0;
+
+        return $last + 1;
+    }
+
+    public function show(Invoice $invoice, InvoiceVerificationService $verification){ 
         $this->authorize('view',$invoice); 
         // Eager load relations for display
 		$invoice->load(['items.apartment','items.expenseItem','tower','children.apartment','children.paymentReports','apartment','paymentReports']);
+        $verification->ensureSignature($invoice);
+        $verifyUrl = $verification->verificationUrl($invoice);
+        $invoiceQrSvg = $verification->qrSvgForInvoice($invoice, 140);
         $user = auth()->user();
         $isAdmin = $user && ($user->hasRole('super_admin') || $user->hasRole('condo_admin') || $user->hasRole('tower_admin') || $invoice->created_by === $user->id);
         $items = $invoice->items;
@@ -233,11 +331,12 @@ class InvoiceController extends Controller {
         }
             $isParent = !$invoice->parent_id && ($invoice->children && $invoice->children->count()>0);
             $allChildrenPaid = $isParent ? ($invoice->children->where('status','paid')->count() === $invoice->children->count()) : false;
-            return view('invoices.show',['invoice'=>$invoice,'items'=>$items,'isAdmin'=>$isAdmin,'isParent'=>$isParent,'allChildrenPaid'=>$allChildrenPaid]); 
+                return view('invoices.show',['invoice'=>$invoice,'items'=>$items,'isAdmin'=>$isAdmin,'isParent'=>$isParent,'allChildrenPaid'=>$allChildrenPaid,'verifyUrl'=>$verifyUrl,'invoiceQrSvg'=>$invoiceQrSvg]); 
     }
     public function create(Request $r){
         $this->authorize('create',Invoice::class);
         $towers = Tower::orderBy('name')->get();
+        $activeRate = CurrencyRate::where('active',true)->orderByDesc('valid_from')->first();
         $selectedTower = null;
         if($r->filled('tower_id')){ $selectedTower = Tower::find($r->tower_id); }
         // Apartamentos según torre seleccionada (o todos)
@@ -245,19 +344,20 @@ class InvoiceController extends Controller {
         if($selectedTower){ $apartmentsQuery->where('tower_id',$selectedTower->id); }
         $apartments = $apartmentsQuery->orderBy('code')->get();
         $items = ExpenseItem::where('active',true)->orderBy('name')->get();
-        return view('invoices.create',compact('selectedTower','towers','apartments','items')); 
+        return view('invoices.create',compact('selectedTower','towers','apartments','items','activeRate')); 
     }
     public function edit(Invoice $invoice, Request $r){
         $this->authorize('update',$invoice);
         if($invoice->status!=='draft'){ return redirect()->route('invoices.show',$invoice)->with('status','Solo se puede editar en borrador'); }
         $towers = Tower::orderBy('name')->get();
         $selectedTower = $invoice->tower_id ? Tower::find($invoice->tower_id) : null;
+        $activeRate = CurrencyRate::where('active',true)->orderByDesc('valid_from')->first();
         $apartmentsQuery = Apartment::query();
         if($selectedTower){ $apartmentsQuery->where('tower_id',$selectedTower->id); }
         $apartments = $apartmentsQuery->orderBy('code')->get();
         $items = ExpenseItem::where('active',true)->orderBy('name')->get();
-        // Prefill: aggregate current invoice items by expense_item_id
-        $existing = $invoice->items()->with('expenseItem')->get(['expense_item_id','apartment_id','subtotal_usd','distributed','quantity']);
+        // Prefill: aggregate current invoice items by expense_item_id (excluyendo el fondo de reserva, que es autogenerado)
+        $existing = $invoice->items()->where('is_reserve', false)->with('expenseItem')->get(['expense_item_id','apartment_id','base_amount_usd','base_amount_ves','subtotal_usd','distributed','quantity']);
         $selectedApartmentIds = $existing->pluck('apartment_id')->unique()->values();
         $grouped = [];
         foreach($existing as $row){
@@ -267,55 +367,30 @@ class InvoiceController extends Controller {
                     'expense_item_id'=>$eid,
                     'name'=> optional($row->expenseItem)->name ?? ('Item '.$eid),
                     'type'=> optional($row->expenseItem)->type ?? '-',
-                    'amount'=>0.0,
+                    'amount'=>(float)($row->base_amount_usd ?? 0),
+                    'amount_ves'=>(float)($row->base_amount_ves ?? 0),
                     'quantity'=> (int) ($row->quantity ?? 1),
                     'distribution'=> $row->distributed ? 'aliquota' : 'equal',
                     'apartment_ids'=> [],
                 ];
             }
-            $grouped[$eid]['amount'] += (float)$row->subtotal_usd; // sum subtotals
             $grouped[$eid]['apartment_ids'][] = (int) $row->apartment_id;
             // ensure quantity is consistent (first non-null wins)
             if(empty($grouped[$eid]['quantity'])){ $grouped[$eid]['quantity'] = (int) ($row->quantity ?? 1); }
         }
-        // Convert summed subtotal to original amount by dividing by quantity when possible
+        // Keep original entered amount from base_amount_usd to avoid round-trip drift
         $prefill = [];
         foreach($grouped as $g){
-            $qty = max(1, (int) ($g['quantity'] ?? 1));
-            $amount = $g['amount'];
-            $perUnit = $qty > 0 ? round(((float)$amount) / $qty, 2) : (float)$amount;
-            $g['amount'] = $perUnit;
+            $g['amount'] = round((float)($g['amount'] ?? 0), 2);
+            $g['amount_ves'] = round((float)($g['amount_ves'] ?? 0), 2);
             $g['apartment_ids'] = collect($g['apartment_ids'] ?? [])->filter()->unique()->values()->all();
             $prefill[] = $g;
         }
-        return view('invoices.edit',compact('invoice','selectedTower','towers','apartments','items','prefill','selectedApartmentIds'));
+        return view('invoices.edit',compact('invoice','selectedTower','towers','apartments','items','prefill','selectedApartmentIds','activeRate'));
     }
-    public function store(Request $r, BillingService $billing){
-        $this->authorize('store',Invoice::class);
-        $data=$r->validate([
-            'tower_id'        =>'nullable|exists:towers,id',
-            'period'          =>'required|date_format:Y-m',
-            'apartment_ids'   =>'nullable|array',
-            'items_payload'   =>'nullable|string',
-            'late_fee_type'   =>'nullable|in:percent,fixed',
-            'late_fee_scope'  =>'nullable|in:day,week,month',
-            'late_fee_value'  =>'nullable|numeric|min:0'
-        ]);
-        $rawPayload = $data['items_payload'] ?? '[]';
-        $items = json_decode($rawPayload, true);
-        if(!is_array($items)){
-            $items = [];
-        }
-        if(count($items) > 0){
-            if(empty($data['apartment_ids']) || !is_array($data['apartment_ids'])){
-                return back()->withErrors(['apartment_ids'=>'Debes seleccionar al menos un apartamento'])->withInput();
-            }
-            foreach($items as $i){
-                if(($i['amount'] ?? 0) < 0){ return back()->withErrors(['items_payload'=>'Monto negativo no permitido'])->withInput(); }
-                if(!in_array(($i['distribution'] ?? 'aliquota'), ['aliquota','equal'])){ return back()->withErrors(['items_payload'=>'Distribución inválida'])->withInput(); }
-            }
-        }
-        // Adaptar al BillingService: extraer ids y pasar detalles por separado
+    public function store(StoreInvoiceRequest $r, BillingService $billing){
+        $data = $r->validated();
+        $items = $r->items();
         $expenseItemIds = array_map(fn($i)=>$i['expense_item_id'], $items);
         $invoice=$billing->generateInvoice(
             $data['period'],
@@ -323,118 +398,129 @@ class InvoiceController extends Controller {
             $data['apartment_ids'] ?? [],
             ['type'=>$data['late_fee_type']??null,'scope'=>$data['late_fee_scope']??null,'value'=>$data['late_fee_value']??null],
             $data['tower_id']??null,
-            $items // pasar detalles por ítem (amount, quantity, distribution)
+            $items, // detalles por ítem (amount, quantity, distribution)
+            $r->reserveOpts()
         );
         return redirect()->route('invoices.show',$invoice); 
     }
-    public function update(Invoice $invoice, Request $r, BillingService $billing){
-        $this->authorize('update',$invoice);
+    public function update(Invoice $invoice, UpdateInvoiceRequest $r, BillingService $billing){
         if($invoice->status!=='draft'){ return redirect()->route('invoices.show',$invoice)->with('status','Solo se puede editar en borrador'); }
-        $data=$r->validate([
-            'tower_id'        =>'nullable|exists:towers,id',
-            'period'          =>'required|date_format:Y-m',
-            'apartment_ids'   =>'nullable|array',
-            'items_payload'   =>'nullable|string',
-            'late_fee_type'   =>'nullable|in:percent,fixed',
-            'late_fee_scope'  =>'nullable|in:day,week,month',
-            'late_fee_value'  =>'nullable|numeric|min:0'
-        ]);
-        $rawPayload = $data['items_payload'] ?? '[]';
-        $items = json_decode($rawPayload, true);
-        if(!is_array($items)){
-            $items = [];
-        }
-        if(count($items) > 0){
-            if(empty($data['apartment_ids']) || !is_array($data['apartment_ids'])){
-                return back()->withErrors(['apartment_ids'=>'Debes seleccionar al menos un apartamento'])->withInput();
-            }
-            foreach($items as $i){
-                if(($i['amount'] ?? 0) < 0){ return back()->withErrors(['items_payload'=>'Monto negativo no permitido'])->withInput(); }
-                if(!in_array(($i['distribution'] ?? 'aliquota'), ['aliquota','equal'])){ return back()->withErrors(['items_payload'=>'Distribución inválida'])->withInput(); }
-            }
-        }
-        // Rebuild invoice items: delete current and re-generate with service (keeping same invoice record)
-        \DB::transaction(function() use ($invoice){ $invoice->items()->delete(); });
+        $data = $r->validated();
+        $items = $r->items();
         $expenseItemIds = array_map(fn($i)=>$i['expense_item_id'], $items);
-
-        // Si no hay ítems, permitir guardar borrador vacío
-        if(count($items) === 0){
-            $rate = \App\Models\CurrencyRate::where('active',true)->orderByDesc('valid_from')->first();
-            $invoice->update([
-                'tower_id'          => $data['tower_id'] ?? $invoice->tower_id,
-                'period'            => $data['period'],
-                'late_fee_type'     => $data['late_fee_type'] ?? null,
-                'late_fee_scope'    => $data['late_fee_scope'] ?? null,
-                'late_fee_value'    => $data['late_fee_value'] ?? null,
-                'exchange_rate_used'=> $rate ? $rate->rate : $invoice->exchange_rate_used,
-                'total_usd'         => 0,
-                'total_ves'         => 0,
-            ]);
-            return redirect()->route('invoices.show',$invoice)->with('status','Factura actualizada');
-        }
-
-        // Temporarily compute using service by creating a new invoice object would create another record.
-        // Instead, we simulate generation and update totals for existing invoice.
-        $rate = \App\Models\CurrencyRate::where('active',true)->orderByDesc('valid_from')->first();
-        $apartments   = \App\Models\Apartment::whereIn('id',$data['apartment_ids'])->get();
-        $expenseItems = \App\Models\ExpenseItem::whereIn('id',$expenseItemIds)->get();
-        $totalUsd     = 0;
-        $detailsById = [];
-        foreach($items as $d){ $detailsById[(int)$d['expense_item_id']] = $d; }
-        foreach($expenseItems as $item){
-            $detail = $detailsById[$item->id] ?? ['amount'=>0,'quantity'=>1,'distribution'=>'aliquota'];
-            $totalAmount = (float) ($detail['amount'] ?? 0);
-            $quantity    = max(1, (int) ($detail['quantity'] ?? 1));
-            $distribution= $detail['distribution'] ?? 'aliquota';
-            // Per-item apartments override
-            $itemApartmentIds = collect($detail['apartment_ids'] ?? [])->filter()->map(fn($v)=>(int)$v)->values();
-            $apartmentsForItem = $itemApartmentIds->isNotEmpty() ? \App\Models\Apartment::whereIn('id',$itemApartmentIds)->get() : $apartments;
-            if($distribution === 'aliquota'){
-                $sumAliquot = $apartmentsForItem->sum('aliquot_percent');
-                foreach($apartmentsForItem as $ap){
-                    $portion = $sumAliquot > 0 ? round($totalAmount * ($ap->aliquot_percent / $sumAliquot),2) : 0;
-                    $subtotal = $portion * $quantity;
-                    $totalUsd += $subtotal;
-                    \App\Models\InvoiceItem::create([
-                        'invoice_id'      => $invoice->id,
-                        'apartment_id'    => $ap->id,
-                        'expense_item_id' => $item->id,
-                        'base_amount_usd' => $totalAmount,
-                        'quantity'        => $quantity,
-                        'distributed'     => true,
-                        'subtotal_usd'    => $subtotal,
-                        'subtotal_ves'    => $subtotal * ($rate->rate ?? 0),
-                    ]);
-                }
-            } else {
-                $count = max(1, $apartmentsForItem->count());
-                $portionEach = $count > 0 ? round(($totalAmount * $quantity) / $count, 2) : 0;
-                foreach($apartmentsForItem as $ap){
-                    $totalUsd += $portionEach;
-                    \App\Models\InvoiceItem::create([
-                        'invoice_id'      => $invoice->id,
-                        'apartment_id'    => $ap->id,
-                        'expense_item_id' => $item->id,
-                        'base_amount_usd' => $totalAmount,
-                        'quantity'        => $quantity,
-                        'distributed'     => false,
-                        'subtotal_usd'    => $portionEach,
-                        'subtotal_ves'    => $portionEach * ($rate->rate ?? 0),
-                    ]);
-                }
-            }
-        }
-        $invoice->update([
-            'tower_id'          => $data['tower_id'] ?? $invoice->tower_id,
-            'period'            => $data['period'],
-            'late_fee_type'     => $data['late_fee_type'] ?? null,
-            'late_fee_scope'    => $data['late_fee_scope'] ?? null,
-            'late_fee_value'    => $data['late_fee_value'] ?? null,
-            'exchange_rate_used'=> $rate->rate ?? $invoice->exchange_rate_used,
-            'total_usd'         => $totalUsd,
-            'total_ves'         => $totalUsd * ($rate->rate ?? 0),
-        ]);
+        $billing->regenerateInvoice(
+            $invoice,
+            $data['period'],
+            $expenseItemIds,
+            $data['apartment_ids'] ?? [],
+            ['type'=>$data['late_fee_type']??null,'scope'=>$data['late_fee_scope']??null,'value'=>$data['late_fee_value']??null],
+            $data['tower_id']??null,
+            $items,
+            $r->reserveOpts()
+        );
         return redirect()->route('invoices.show',$invoice)->with('status','Factura actualizada');
+    }
+
+    public function void(Invoice $invoice, Request $request)
+    {
+        $this->authorize('void', $invoice);
+
+        $reason = $request->input('reason');
+        if (empty($reason)) {
+            return back()->withErrors(['reason' => 'Debes indicar el motivo de anulación.']);
+        }
+
+        $invoice->update([
+            'status' => 'voided',
+            'voided_at' => now(),
+            'void_reason' => $reason,
+        ]);
+
+        app(AuditService::class)->log('invoice_voided', 'Invoice', $invoice->id, [
+            'reason' => $reason,
+        ]);
+
+        return redirect()->route('invoices.show', $invoice)->with('status', 'Factura anulada.');
+    }
+
+    public function reissue(Invoice $invoice, Request $request, BillingService $billing, InvoiceVerificationService $verification)
+    {
+        $this->authorize('reissue', $invoice);
+
+        $reason = $request->input('reason');
+        if (empty($reason)) {
+            return back()->withErrors(['reason' => 'Debes indicar el motivo de reemisión.']);
+        }
+
+        $newInvoice = \DB::transaction(function () use ($invoice, $reason) {
+            // Marcar original como anulada/reemplazada
+            $invoice->update([
+                'status' => 'voided',
+                'voided_at' => now(),
+                'void_reason' => $reason,
+                'reissued_by' => auth()->id(),
+            ]);
+
+            // Crear borrador clonado a partir de la factura actual
+            $new = Invoice::create([
+                'parent_id' => $invoice->parent_id,
+                'apartment_id' => $invoice->apartment_id,
+                'tower_id' => $invoice->tower_id,
+                'created_by' => auth()->id(),
+                'period' => $invoice->period,
+                'due_date' => $invoice->due_date,
+                'status' => 'draft',
+                'late_fee_type' => $invoice->late_fee_type,
+                'late_fee_scope' => $invoice->late_fee_scope,
+                'late_fee_value' => $invoice->late_fee_value,
+                'exchange_rate_used' => $invoice->exchange_rate_used,
+                'total_usd' => 0,
+                'total_ves' => 0,
+                'owner_name' => $invoice->owner_name,
+                'owner_email' => $invoice->owner_email,
+                'owner_document' => $invoice->owner_document,
+            ]);
+
+            // Copiar ítems
+            foreach ($invoice->items as $row) {
+                \App\Models\InvoiceItem::create([
+                    'invoice_id' => $new->id,
+                    'apartment_id' => $row->apartment_id,
+                    'expense_item_id' => $row->expense_item_id,
+                    'base_amount_usd' => $row->base_amount_usd,
+                    'base_amount_ves' => $row->base_amount_ves,
+                    'quantity' => $row->quantity,
+                    'distributed' => $row->distributed,
+                    'is_reserve' => $row->is_reserve,
+                    'subtotal_usd' => $row->subtotal_usd,
+                    'subtotal_ves' => $row->subtotal_ves,
+                ]);
+            }
+
+            // Recalcular totales
+            $totals = \App\Models\InvoiceItem::where('invoice_id', $new->id)
+                ->selectRaw('COALESCE(SUM(subtotal_usd),0) as usd, COALESCE(SUM(subtotal_ves),0) as ves')
+                ->first();
+            $new->update([
+                'total_usd' => round((float) ($totals->usd ?? 0), 2),
+                'total_ves' => round((float) ($totals->ves ?? 0), 2),
+            ]);
+
+            // Enlazar original con la nueva
+            $invoice->update(['reissued_to_invoice_id' => $new->id]);
+            $new->update(['reissued_from_invoice_id' => $invoice->id]);
+
+            return $new;
+        });
+
+        $verification->ensureSignature($newInvoice);
+
+        app(AuditService::class)->log('invoice_reissued', 'Invoice', $invoice->id, [
+            'reason' => $reason,
+            'new_invoice_id' => $newInvoice->id,
+        ]);
+
+        return redirect()->route('invoices.show', $newInvoice)->with('status', 'Factura reemitida. La anterior fue anulada y enlazada a la nueva.');
     }
 }
 

@@ -1,9 +1,9 @@
 @extends('layouts.app')
 
 @section('content')
-	<div class="d-flex align-items-center justify-content-between mb-3">
-		<h1 class="h4 mb-0">Revisar Pago #{{ $paymentReport->id }}</h1>
-		<a href="{{ route('invoices.show', $paymentReport->invoice_id) }}" class="btn btn-outline-secondary btn-sm">Volver</a>
+	<div class="d-flex align-items-center justify-content-between page-header">
+		<h1><i class="bi bi-search me-2"></i>Revisar Pago #{{ $paymentReport->id }}</h1>
+		<a href="{{ route('invoices.show', $paymentReport->invoice_id) }}" class="btn btn-outline-secondary btn-action"><i class="bi bi-arrow-left"></i> Volver</a>
 	</div>
 
 	<div class="card">
@@ -28,13 +28,13 @@
 				<dd class="col-sm-9">{{ $paymentReport->notes }}</dd>
 			</dl>
 
-			@if(!empty($paymentReport->files))
+			@if(!empty($fileLinks))
 				<hr>
 				<h2 class="h6">Archivos</h2>
 				<ul class="mb-0">
-					@foreach($paymentReport->files as $f)
+					@foreach($fileLinks as $fileLink)
 						<li>
-							<a href="{{ Storage::disk('public')->url($f) }}" target="_blank" rel="noopener">Archivo</a>
+							<a href="{{ $fileLink['url'] }}" target="_blank" rel="noopener">Archivo</a>
 						</li>
 					@endforeach
 				</ul>
@@ -46,16 +46,21 @@
 					<form method="POST" action="{{ route('payments.approve', $paymentReport) }}">
 						@csrf
 						@method('PATCH')
-						<button class="btn btn-success" onclick="return confirm('¿Aprobar este pago?')">Aprobar</button>
+						<button class="btn btn-success btn-action" onclick="return confirm('¿Aprobar este pago?')"><i class="bi bi-check-circle"></i> Aprobar</button>
 					</form>
 
 					<form method="POST" action="{{ route('payments.reject', $paymentReport) }}">
 						@csrf
 						@method('PATCH')
-						<button class="btn btn-danger" onclick="return confirm('¿Rechazar este pago?')">Rechazar</button>
+						<button class="btn btn-danger btn-action" onclick="return confirm('¿Rechazar este pago?')"><i class="bi bi-x-circle"></i> Rechazar</button>
 					</form>
 				</div>
 			@endif
+
+			@include('partials.comments', [
+				'entity' => $paymentReport,
+				'storeRoute' => route('payment-reports.comments.store', $paymentReport),
+			])
 		</div>
 	</div>
 @endsection
